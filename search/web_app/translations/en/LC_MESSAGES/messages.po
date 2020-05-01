@@ -21,7 +21,7 @@ msgstr ""
 # ********  Please fill in the following strings:  ********
 
 msgid "corpus_title"
-msgstr "(INSERT CORPUS TITLE IN messages.po)"
+msgstr "Multilingual WC Corpus"
 
 # Language names for the dropdown menu in search panel (please add all missing languages that you have in the corpus):
 
@@ -180,6 +180,15 @@ msgstr "all"
 
 msgid "langname_undefined"
 msgstr "undefined"
+
+msgid "langname_other"
+msgstr "other"
+
+msgid "langname_hungarian"
+msgstr "Hungarian"
+
+msgid "langname_polish"
+msgstr "Polish"
 
 
 
@@ -393,6 +402,9 @@ msgstr "Date of translation"
 
 msgid "metafield_sent_analyses"
 msgstr "Sentence analyzed"
+
+msgid "metafield_message_type"
+msgstr "Message type"
 
 
 

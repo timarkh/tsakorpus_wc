@@ -1,4 +1,9 @@
-Copyright (c) 2017 Timofey Arkhangelskiy <timarkh@gmail.com> and other contributors
+Copyright (c) 2017-2020 Timofey Arkhangelskiy <timarkh@gmail.com>
+Copyright (c) 2019-2020 Oksana Dereza
+Copyright (c) 2019-2020 Nadezhda Ganzherli
+Copyright (c) 2019-2020 Maria Kunilovskaya
+Copyright (c) 2020 Ivan Sapogov
+Copyright (c) 2019-2020 Ilya Uchitel
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

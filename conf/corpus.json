@@ -1,92 +1,275 @@
 {
-  "corpus_name": "some_unique_corpus_name",
-  "input_format": "json-gzip",
+  "corpus_name": "wc_corpus",
+  "input_format": "json",
   "debug": false,
   "media": false,
-  "media_length": 60,
-  "max_context_expand": 4,
+  "images": true,
+  "max_context_expand": 1000,
   "max_distance_filter": 200000,
   "max_docs_retrieve": 9999,
   "max_words_in_sentence": 40,
   "query_timeout": 60,
   "viewable_meta": [
     "filename",
-    "author",
-    "title",
-    "genre",
-    "year_from",
-    "year_to",
-    "year"
+    "sex",
+    "year",
+    "city",
+    "organization",
+    "organization_type"
   ],
   "sentence_meta": [
-    "age",
-    "gender"
+    "message_type",
+    "img"
   ],
+  "line_plot_meta": [
+    "year"
+  ],
+  "generate_dictionary": true,
   "search_meta": {
     "columns": [
       [
-        {"type": "input_text", "name": "author", "placeholder": "Author"},
         {"type": "input_text", "name": "title", "placeholder": "Title"},
         {"type": "separator"},
         {"type": "input_number", "name": "year_from", "placeholder": "Year: from"},
-        {"type": "input_number", "name": "year_to", "placeholder": "Year: to"}
+        {"type": "input_number", "name": "year_to", "placeholder": "Year: to"},
+        {"type": "input_text", "name": "organization_type", "placeholder": "Organization type"},
+        {"type": "option", "name": "organization_type", "value": "university", "text": "university"},
+        {"type": "option", "name": "organization_type", "value": "school", "text": "school"},
+        {"type": "option", "name": "organization_type", "value": "airport", "text": "airport"},
+        {"type": "option", "name": "organization_type", "value": "mall", "text": "mall"}
       ],
       [
-        {"type": "input_text", "name": "genre", "placeholder": "Genre"},
-        {"type": "option", "name": "genre", "value": "fiction", "text": "fiction"},
-        {"type": "option", "name": "genre", "value": "nonfiction", "text": "non-fiction"},
-        {"type": "option", "name": "genre", "value": "press", "text": "press"},
-        {"type": "option", "name": "genre", "value": "blog", "text": "blog"}
+        {"type": "input_text", "name": "city", "placeholder": "City"},
+        {"type": "option", "name": "city", "value": "Moscow", "text": "Moscow"},
+        {"type": "option", "name": "city", "value": "Tyumen", "text": "Tyumen"},
+        {"type": "option", "name": "city", "value": "Helsinki", "text": "Helsinki"},
+        {"type": "option", "name": "city", "value": "Tallinn", "text": "Tallinn"},
+        {"type": "option", "name": "city", "value": "Berlin", "text": "Berlin"},
+        {"type": "option", "name": "city", "value": "Bielefeld", "text": "Bielefeld"},
+        {"type": "option", "name": "city", "value": "Leipzig", "text": "Leipzig"},
+        {"type": "option", "name": "city", "value": "Vienna", "text": "Vienna"}
       ]
     ],
     "stat_options": [
-      "genre",
-      "author",
-      "title",
-      "year"
+      "year",
+      "sex",
+      "city",
+      "organization",
+      "organization_type"
     ]
   },
   "word_fields":
   [
-    "trans_ru",
-    "trans_en"
+    "sem",
+    "sem2"
   ],
-  "languages": ["your_corpus_language"],
-  "transliterations": ["original", "IPA"],
-  "input_methods": ["normal"],
+  "kw_word_fields":
+  [
+    "sem",
+    "sem2"
+  ],
+  "languages": ["russian", "english", "spanish", "german", "hungarian", "polish", "finnish", "other", "english_trans"],
+  "transliterations": ["original"],
   "interface_languages": {"en": "English", "ru": "Russian"},
   "all_language_search_enabled": true,
-  "gloss_search_enabled": true,
+  "gloss_search_enabled": false,
   "ambiguous_analyses": true,
   "lang_props":
   {
-    "your_corpus_language":
+    "russian":
     {
+      "dictionary_categories": ["gender", "proType", "nType", "0"],
       "gloss_shortcuts": {
-        "case": "(obl(\\.pl)?|abs|erg|gen|abl|ins)",
-        "tense": "(pst|fut|prs)"
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
       },
-      "gr_fields_order": ["tense", "person", "number", "case", "poss"],
-      "gloss_selection": {
-        "columns": [
-          [
-            {"type": "gloss", "value": "CASE", "tooltip": "Any&nbsp;case&nbsp;marker"},
-            {"type": "gloss", "value": "ABS", "tooltip": "Absolutive case"},
-            {"type": "gloss", "value": "ERG", "tooltip": "Ergative case"}
-          ]
-        ]
-      },
+      "gr_fields_order": ["vType", "nType", "numType", "adjType", "proType", "stemType", "num_deriv", "v_form", "aspect", "tense", "person", "number", "case", "abbr", "0", "anno"],
       "gramm_selection": {
         "columns": [
           [
             {"type": "header", "value": "Parts of speech"},
-            {"type": "gramm", "value": "N", "category": "pos", "tooltip": "Noun"},
+            {"type": "gramm", "value": "S", "category": "pos", "tooltip": "Noun"},
             {"type": "gramm", "value": "V", "category": "pos", "tooltip": "Verb"},
             {"type": "gramm", "value": "A", "category": "pos", "tooltip": "Adjective"},
-            {"type": "separator"}
+            {"type": "gramm", "value": "ADV", "category": "pos", "tooltip": "Adverb"},
+            {"type": "gramm", "value": "PRAEDIC", "category": "pos", "tooltip": "Predicative"},
+            {"type": "gramm", "value": "NUM", "category": "pos", "tooltip": "Numeral"},
+            {"type": "gramm", "value": "ANUM", "category": "pos", "tooltip": "Numeral Adjective"},
+            {"type": "gramm", "value": "SPRO", "category": "pos", "tooltip": "Substantive Pronoun"},
+            {"type": "gramm", "value": "APRO", "category": "pos", "tooltip": "Adjective Pronoun"},
+            {"type": "gramm", "value": "ADVPRO", "category": "pos", "tooltip": "Adverbial Pronoun"},
+            {"type": "gramm", "value": "PRAEDICPRO", "category": "pos", "tooltip": "Predicative Pronoun"},
+            {"type": "gramm", "value": "PR", "category": "pos", "tooltip": "Preposition"},
+            {"type": "gramm", "value": "CONJ", "category": "pos", "tooltip": "Conjunction"},
+            {"type": "gramm", "value": "PART", "category": "pos", "tooltip": "Particle"},
+            {"type": "gramm", "value": "INTJ", "category": "pos", "tooltip": "Interjection"},
+            {"type": "gramm", "value": "INIT", "category": "pos", "tooltip": "Initial Letter"}
+          ],
+          [
+            {"type": "header", "value": "Case"},
+            {"type": "gramm", "value": "nom", "category": "c", "tooltip": "Nominative"},
+            {"type": "gramm", "value": "gen", "category": "c", "tooltip": "Genitive"},
+            {"type": "gramm", "value": "dat", "category": "c", "tooltip": "Dative"},
+            {"type": "gramm", "value": "acc", "category": "c", "tooltip": "Accusative"},
+            {"type": "gramm", "value": "ins", "category": "c", "tooltip": "Instrumental"},
+            {"type": "gramm", "value": "loc", "category": "c", "tooltip": "Locative"},
+            {"type": "gramm", "value": "voc", "category": "c", "tooltip": "Vocative"},
+            {"type": "separator"},
+            {"type": "gramm", "value": "gen2", "category": "c", "tooltip": "2nd Genitive"},
+            {"type": "gramm", "value": "acc2", "category": "c", "tooltip": "2nd Accusative"},
+            {"type": "gramm", "value": "loc2", "category": "c", "tooltip": "2nd Locative"},
+            {"type": "gramm", "value": "adnum", "category": "c", "tooltip": "Adnumeral"},
+            {"type": "header", "value": "Number"},
+            {"type": "gramm", "value": "sg", "category": "number", "tooltip": "Singular"},
+            {"type": "gramm", "value": "pl", "category": "number", "tooltip": "Plural"}
+          ],
+          [
+            {"type": "header", "value": "Gender"},
+            {"type": "gramm", "value": "m", "category": "gd", "tooltip": "Masculine"},
+            {"type": "gramm", "value": "f", "category": "gd", "tooltip": "Feminine"},
+            {"type": "gramm", "value": "n", "category": "gd", "tooltip": "Neuter"},
+            {"type": "gramm", "value": "mf", "category": "gd", "tooltip": "Common"},
+            {"type": "header", "value": "Animacy"},
+            {"type": "gramm", "value": "anim", "category": "an", "tooltip": "Animate"},
+            {"type": "gramm", "value": "inan", "category": "an", "tooltip": "Inanimate"},
+            {"type": "header", "value": "Transitivity"},
+            {"type": "gramm", "value": "tran", "category": "tr", "tooltip": "Transitive"},
+            {"type": "gramm", "value": "intr", "category": "tr", "tooltip": "Inransitive"}
+          ],
+          [
+            {"type": "header", "value": "Mood / Verb form"},
+            {"type": "gramm", "value": "indic", "category": "mood", "tooltip": "Indicative"},
+            {"type": "gramm", "value": "imper", "category": "v_f", "tooltip": "Imperative"},
+            {"type": "gramm", "value": "imper2", "category": "v_f", "tooltip": "Imperative 2"},
+            {"type": "gramm", "value": "inf", "category": "v_f", "tooltip": "Infinitive"},
+            {"type": "gramm", "value": "partcp", "category": "v_f", "tooltip": "Participle"},
+            {"type": "gramm", "value": "ger", "category": "v_f", "tooltip": "Gerund"},
+            {"type": "header", "value": "Tense"},
+            {"type": "gramm", "value": "praes", "category": "t", "tooltip": "Present"},
+            {"type": "gramm", "value": "fut", "category": "t", "tooltip": "Future"},
+            {"type": "gramm", "value": "praet", "category": "t", "tooltip": "Past"}
+          ],
+          [
+            {"type": "header", "value": "Person"},
+            {"type": "gramm", "value": "1p", "category": "p", "tooltip": "1st"},
+            {"type": "gramm", "value": "2p", "category": "p", "tooltip": "2nd"},
+            {"type": "gramm", "value": "3p", "category": "p", "tooltip": "3rd"},
+            {"type": "header", "value": "Voice"},
+            {"type": "gramm", "value": "act", "category": "vc", "tooltip": "Active"},
+            {"type": "gramm", "value": "pass", "category": "vc", "tooltip": "Passive"},
+            {"type": "gramm", "value": "mid", "category": "vc", "tooltip": "Middle"},
+            {"type": "header", "value": "Aspect"},
+            {"type": "gramm", "value": "pf", "category": "asp", "tooltip": "Perfective"},
+            {"type": "gramm", "value": "ipf", "category": "asp", "tooltip": "Imperfective"}
+          ],
+          [
+            {"type": "header", "value": "Adjectives"},
+            {"type": "gramm", "value": "comp", "category": "adj_c", "tooltip": "Comparative"},
+            {"type": "gramm", "value": "comp2", "category": "adj_c", "tooltip": "Comparative 2"},
+            {"type": "gramm", "value": "super", "category": "adj_c", "tooltip": "Superlative"},
+            {"type": "gramm", "value": "plen", "category": "adj_f", "tooltip": "Full form"},
+            {"type": "gramm", "value": "brev", "category": "adj_f", "tooltip": "Short form"},
+            {"type": "header", "value": "Classes of nouns"},
+            {"type": "gramm", "value": "persn", "category": "nT", "tooltip": "Name"},
+            {"type": "gramm", "value": "patrn", "category": "nT", "tooltip": "Patronymic"},
+            {"type": "gramm", "value": "famn", "category": "nT", "tooltip": "Family name"},
+            {"type": "gramm", "value": "zoon", "category": "nT", "tooltip": "Zoonym"},
+            {"type": "gramm", "value": "topn", "category": "nT", "tooltip": "Toponymic"},
+            {"type": "gramm", "value": "0", "category": "nT", "tooltip": "Indeclinable"}
+          ],
+          [
+            {"type": "header", "value": "Other features"},
+            {"type": "gramm", "value": "ciph", "category": "add", "tooltip": "Digit"},
+            {"type": "gramm", "value": "anom", "category": "add", "tooltip": "Anomalous form"},
+            {"type": "gramm", "value": "distort", "category": "add", "tooltip": "Distortion"},
+            {"type": "gramm", "value": "abbr", "category": "add", "tooltip": "Abbreviation"},
+            {"type": "separator"},
+            {"type": "gramm", "value": "norm", "category": "add", "tooltip": "Word in dictionary"},
+            {"type": "gramm", "value": "bastard", "category": "add", "tooltip": "Word not in dictionary"}
           ]
         ]
       }
+    },
+    "english":
+    {
+      "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
+      "gloss_shortcuts": {
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
+      },
+      "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
+    },
+    "spanish":
+    {
+      "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
+      "gloss_shortcuts": {
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
+      },
+      "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
+    },
+    "german":
+    {
+      "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
+      "gloss_shortcuts": {
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
+      },
+      "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
+    },
+    "polish":
+    {
+      "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
+      "gloss_shortcuts": {
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
+      },
+      "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
+    },
+    "hungarian":
+    {
+      "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
+      "gloss_shortcuts": {
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
+      },
+      "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
+    },
+    "finnish":
+    {
+      "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
+      "gloss_shortcuts": {
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
+      },
+      "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
+    },
+    "other":
+    {
+      "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
+      "gloss_shortcuts": {
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
+      },
+      "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
+    },
+    "english_trans":
+    {
+      "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
+      "gloss_shortcuts": {
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
+      },
+      "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
     }
   }
 }

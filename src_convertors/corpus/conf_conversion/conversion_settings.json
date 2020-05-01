@@ -1,0 +1,34 @@
+{
+  "meta_filename": "meta.csv",
+  "meta_fields":
+  [
+    "filename",
+    "title",
+    "aux",
+    "picture_author",
+    "year",
+    "sex",
+    "city",
+    "organization",
+    "organization_type"
+  ],
+  "languages": ["russian", "english", "spanish", "german", "hungarian", "polish", "finnish", "other", "english_trans"],
+  "meta_files_ext": false,
+  "meta_files_dir": false,
+  "meta_files_case_sensitive": true,
+  "special_tokens": {
+    "[☭卐ॐ☦💣❤🙂🙁]": {"wtype": "word"}
+  },
+  "sentence_meta": ["img", "message_type", "text", "text_trans", "language"],
+  "parsed_wordlist_filename": {"russian": "russian_parsed.txt"},
+  "parsed_wordlist_format": "xml_rnc",
+  "json_indent": 1,
+  "convert_quotes": false,
+  "gzip": false,
+  "left_quot_mark": "«",
+  "right_quot_mark": "»",
+  "sent_end_punc": "(?:[.!?;;]+(?:[)\\]}>/»]|$)|\\\\n)",
+  "sent_start": "^[A-ZÄÖÜА-ЯЁӤӦӴӞӜ]",
+  "newline_ends_sent": true,
+  "abbreviations": []
+}

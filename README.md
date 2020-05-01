@@ -12,6 +12,8 @@ The multilingual corpus of latrinalia (restroom inscriptions) is a result of an 
 
 The source files (images, metadata and transcriptions) are located in ``src_convertors/corpus``. You may use them as you wish; however, we would appreciate mentioning the authors and including the link either to this repository or to the web site.
 
+As you might imagine, the transcriptions sometimes contain obscene, racist or other potentially insulting texts. They were faithfully reproduced for research purposes. In no way does this mean that the authors of the transcriptions agree with any of the statements you may find in the corpus.
+
 ## License
 
 The software and the source files are distributed under MIT license (see ``LICENSE.md``).

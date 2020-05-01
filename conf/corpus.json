@@ -68,7 +68,7 @@
     "sem",
     "sem2"
   ],
-  "languages": ["russian", "english", "spanish", "german", "hungarian", "polish", "finnish", "other", "english_trans"],
+  "languages": ["russian", "english", "spanish", "german", "french", "hungarian", "polish", "finnish", "other", "english_trans"],
   "transliterations": ["original"],
   "interface_languages": {"en": "English", "ru": "Russian"},
   "all_language_search_enabled": true,
@@ -202,6 +202,16 @@
       "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
     },
     "spanish":
+    {
+      "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
+      "gloss_shortcuts": {
+        "case": "(nom|gen|gen2|dat|acc|acc2|ins|loc|loc2|voc)",
+        "pers": "(([123](sg|pl)|rel|rec|rfl)\\.(abs|erg|io))",
+        "tense": "(praet|fut|praes)"
+      },
+      "gr_fields_order": ["nT", "an", "numT", "proT", "advT", "adjT", "tr", "asp", "v_f", "mood", "cnv_f", "t", "vc", "p", "adj_f", "gd", "num", "c", "add"]
+    },
+    "french":
     {
       "dictionary_categories": ["proT", "nT", "advT", "adjT", "tr", "asp", "an"],
       "gloss_shortcuts": {

@@ -12,7 +12,7 @@
     "organization",
     "organization_type"
   ],
-  "languages": ["russian", "english", "spanish", "german", "hungarian", "polish", "finnish", "other", "english_trans"],
+  "languages": ["russian", "english", "spanish", "german", "french", "hungarian", "polish", "finnish", "other", "english_trans"],
   "meta_files_ext": false,
   "meta_files_dir": false,
   "meta_files_case_sensitive": true,

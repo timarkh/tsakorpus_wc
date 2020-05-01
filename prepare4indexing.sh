@@ -30,6 +30,12 @@ rm corpus/meta_enhanced.csv
 rm -rf ../corpus/wc_corpus
 mkdir -p ../corpus/wc_corpus
 mv corpus/json ../corpus/wc_corpus
+echo "JSON files moved."
+
+cd ..
+rm -rf search/img
+mkdir search/img
+python3 move_images.py
 END_TIME="$(date -u +%s)"
 ELAPSED_TIME="$(($END_TIME-$START_TIME))"
 echo "Corpus files prepared in $ELAPSED_TIME seconds, finishing now."

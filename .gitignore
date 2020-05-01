@@ -5,6 +5,7 @@ txt2json/corpus/txt/**
 corpus/**
 search/media/**
 search/tmp/**
+search/img/**
 src_convertors/error.log
 docs_doxygen/**
 search/img/**

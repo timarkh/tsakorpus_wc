@@ -19,9 +19,14 @@ sed -i 's/<ana lex="[^<>"]" gr="S,abbr[^<>"]*" \/>//g' russian_wordlist.csv-pars
 echo "Russian word list analyzed."
 
 # Conversion to Tsakorpus JSON
+python3 prepare_meta.py
 cd ..
 python3 img_csv2json.py
 echo "Source conversion ready."
+
+find corpus -type f -name '*_wordlist.csv' -delete
+find corpus -type f -name '*-parsed.txt' -delete
+rm corpus/meta_enhanced.csv
 rm -rf ../corpus/wc_corpus
 mkdir -p ../corpus/wc_corpus
 mv corpus/json ../corpus/wc_corpus

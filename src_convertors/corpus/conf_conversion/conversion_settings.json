@@ -1,5 +1,5 @@
 {
-  "meta_filename": "meta.csv",
+  "meta_filename": "meta_enhanced.csv",
   "meta_fields":
   [
     "filename",
@@ -20,7 +20,7 @@
     "[☭卐ॐ☦💣❤🙂🙁]": {"wtype": "word"}
   },
   "sentence_meta": ["img", "message_type", "text", "text_trans", "language"],
-  "parsed_wordlist_filename": {"russian": "russian_parsed.txt"},
+  "parsed_wordlist_filename": {"russian": "russian_wordlist.csv-parsed.txt"},
   "parsed_wordlist_format": "xml_rnc",
   "json_indent": 1,
   "convert_quotes": false,

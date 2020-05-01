@@ -22,7 +22,7 @@ def process_file(fpath, fname, dictConc):
         lang = line[-1].lower()
         if lang not in dictConc:
             dictConc[lang] = {}
-        lineText = line[2].lower()
+        lineText = line[2].replace('\\n', ' ').lower()
         words = rxWords.findall(lineText)
         for word in words:
             nWords += 1

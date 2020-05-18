@@ -282,7 +282,8 @@ class Eaf2JSON(Txt2JSON):
         """
         Return a list of words with their analyses retrieved from the relevant
         tiers of an analyzed EAF file. Try to align words with the text of the
-        entire sentence.
+        entire sentence. Return the text as well, since it may be slightly altered
+        if there is no exact correspondence between the text tier and the token tier.
         """
         words = []
         iSentPos = 0
@@ -303,8 +304,14 @@ class Eaf2JSON(Txt2JSON):
                 sBuffer = ''
                 iBufferStart = iSentPos
             if iSentPos == len(text):
-                print('Unexpected end of sentence:', text)
-                return words
+                # If the remaining tokens consist of punctuation, add them to the sentence
+                if self.rxLetters.search(word) is None:
+                    text += word
+                    words += self.add_punc(word, iSentPos)
+                    continue
+                else:
+                    print('Unexpected end of sentence:', text)
+                    return words, text
             token = {'wf': word, 'off_start': iSentPos, 'off_end': iSentPos + len(word), 'wtype': 'word'}
             while iSentPos < len(text) and iWordPos < len(word):
                 if text[iSentPos].lower() == word[iWordPos].lower():
@@ -322,7 +329,7 @@ class Eaf2JSON(Txt2JSON):
             words.append(token)
         if iSentPos < len(text):
             words += self.add_punc(text[iSentPos:], iSentPos)
-        return words
+        return words, text
 
     def process_span_annotation_tier(self, tierNode):
         """
@@ -445,10 +452,10 @@ class Eaf2JSON(Txt2JSON):
                 self.tp.splitter.add_next_word_id_sentence(curSent)
                 self.tp.parser.analyze_sentence(curSent, lang=lang)
             else:
-                curSent['words'] = self.retrieve_words(text,
-                                                       self.segmentChildren[(segNode.attrib['ANNOTATION_ID'],
-                                                                             'word')],
-                                                       lang=lang)
+                curSent['words'], curSent['text'] = self.retrieve_words(text,
+                                                        self.segmentChildren[(segNode.attrib['ANNOTATION_ID'],
+                                                                              'word')],
+                                                        lang=lang)
                 self.tp.splitter.add_next_word_id_sentence(curSent)
             if len(self.corpusSettings['aligned_tiers']) > 0:
                 if not alignedTier:
@@ -507,7 +514,8 @@ class Eaf2JSON(Txt2JSON):
                     curSentence['meta'] = {}
                 if annoTierID not in curSentence['meta']:
                     curSentence['meta'][annoTierID] = []
-                curSentence['meta'][annoTierID].append(curSpanValue + ' [' + str(iSpan) + ']')
+                if curSpanValue not in curSentence['meta'][annoTierID]:
+                    curSentence['meta'][annoTierID].append(curSpanValue)
 
                 # The ugly part: span-like annotations in ELAN are time-aligned, but usually
                 # they refer to tokens, which are symbolical subdivisions of a time-aligned
@@ -534,7 +542,8 @@ class Eaf2JSON(Txt2JSON):
                     curSentence['style_spans'].append({
                         'off_start': spanOffStart,
                         'off_end': spanOffEnd,
-                        'span_class': spanStyle
+                        'span_class': spanStyle,
+                        'tooltip_text': curSpanValue + ' [' + str(iSpan) + ']'
                     })
                 if curSpanEnd < curSentenceEnd:
                     iSpan += 1

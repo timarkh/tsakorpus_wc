@@ -24,5 +24,5 @@ def move_images(dirSrc, dirDest):
 if __name__ == '__main__':
     imgDir = input('Please enter the full path of the image directory: ')
     if len(imgDir) > 0:
-        move_images(imgDir, 'search/img')
+        move_images(imgDir, '/var/www/html/wc_corpus/img/')
 

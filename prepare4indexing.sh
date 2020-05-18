@@ -34,7 +34,8 @@ echo "JSON files moved."
 
 cd ..
 rm -rf search/img
-mkdir search/img
+rm -rf /var/www/html/wc_corpus/img/
+mkdir /var/www/html/wc_corpus/img/
 python3 move_images.py
 END_TIME="$(date -u +%s)"
 ELAPSED_TIME="$(($END_TIME-$START_TIME))"

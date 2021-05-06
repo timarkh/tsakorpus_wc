@@ -1,9 +1,18 @@
 import json
 import html
 import os
+import copy
 import math
+import re
+import jinja2
 from flask import render_template
-from .transliteration import *
+try:
+    from .transliteration import *
+except ImportError:
+    # This happens when response_processots.py is imported
+    # from outside this package, but we do not need the
+    # transliterations in that case
+    pass
 
 
 class SentenceViewer:
@@ -18,23 +27,40 @@ class SentenceViewer:
     rxTabs = re.compile('^\t*$')
     invisibleAnaFields = {'gloss_index'}
 
-    def __init__(self, settings_dir, search_client):
-        self.settings_dir = settings_dir
-        f = open(os.path.join(self.settings_dir, 'corpus.json'),
-                 'r', encoding='utf-8')
-        self.settings = json.loads(f.read())
-        f.close()
-        self.name = self.settings['corpus_name']
+    def __init__(self, settings, search_client, fullText=False):
+        """
+        Set fullText = True if this instance is to be used for
+        generating full-text HTML files. This will switch off
+        source alignment spans and maybe some other things.
+        """
+        self.settings = settings
+        self.name = self.settings.corpus_name
         self.sentence_props = ['text']
-        self.dictionary_categories = {lang: set() for lang in self.settings['languages']}
-        for lang in self.settings['lang_props']:
-            if 'dictionary_categories' in self.settings['lang_props'][lang]:
-                self.dictionary_categories[lang] = set(self.settings['lang_props'][lang]['dictionary_categories'])
+        self.dictionary_categories = {lang: set() for lang in self.settings.languages}
+        for lang in self.settings.lang_props:
+            if 'dictionary_categories' in self.settings.lang_props[lang]:
+                self.dictionary_categories[lang] = set(self.settings.lang_props[lang]['dictionary_categories'])
         self.authorMeta = 'author'
-        if 'author_metafield' in self.settings:
-            self.authorMeta = self.settings['author_metafield']
+        if self.settings.author_metafield is not None and len(self.settings.author_metafield) > 0:
+            self.authorMeta = self.settings.author_metafield
         self.sc = search_client
-        self.w1_labels = set(['w1'] + ['w1_' + str(i) for i in range(self.settings['max_words_in_sentence'])])
+        self.w1_labels = set(['w1'] + ['w1_' + str(i) for i in range(self.settings.max_words_in_sentence)])
+        self.templates = {}     # Jinja2 template cache for standalone use
+        self.fullText = fullText
+
+    def render_jinja_html(self, templateDir, templateFilename, **context):
+        """
+        Render a flask template without flask context (needed if
+        this file is imported from outside the package).
+        """
+        try:
+            template = self.templates[(templateDir, templateFilename)]
+        except KeyError:
+            template = jinja2.Environment(
+                loader=jinja2.FileSystemLoader(templateDir + '/')
+            ).get_template(templateFilename)
+            self.templates[(templateDir, templateFilename)] = template
+        return template.render(context)
 
     def differing_ana_field(self, ana1, ana2):
         """
@@ -145,11 +171,11 @@ class SentenceViewer:
         for the language specified by lang.
         """
         def key_comp(p):
-            if 'gr_fields_order' not in self.settings['lang_props'][lang]:
+            if 'gr_fields_order' not in self.settings.lang_props[lang]:
                 return -1
-            if p[0] not in self.settings['lang_props'][lang]['gr_fields_order']:
-                return len(self.settings['lang_props'][lang]['gr_fields_order'])
-            return self.settings['lang_props'][lang]['gr_fields_order'].index(p[0])
+            if p[0] not in self.settings.lang_props[lang]['gr_fields_order']:
+                return len(self.settings.lang_props[lang]['gr_fields_order'])
+            return self.settings.lang_props[lang]['gr_fields_order'].index(p[0])
 
         grAnaPart = ''
         for fv in sorted(grValues, key=key_comp):
@@ -166,18 +192,26 @@ class SentenceViewer:
         """
         grAnaPart = self.build_gr_ana_part_text(grValues, lang)
         if not gramdic:
-            return render_template('grammar_popup.html', grAnaPart=grAnaPart).strip()
-        return render_template('gramdic_popup.html', grAnaPart=grAnaPart).strip()
+            try:
+                return render_template('search_results/grammar_popup.html', grAnaPart=grAnaPart).strip()
+            except AttributeError:
+                return self.render_jinja_html('../search/web_app/templates/search_results',
+                                              'grammar_popup.html', grAnaPart=grAnaPart).strip()
+        try:
+            return render_template('search_results/gramdic_popup.html', grAnaPart=grAnaPart).strip()
+        except AttributeError:
+            return self.render_jinja_html('../search/web_app/templates/search_results',
+                                          'gramdic_popup.html', grAnaPart=grAnaPart).strip()
 
     def build_ana_div(self, ana, lang, translit=None):
         """
         Build the contents of a div with one particular analysis.
         """
         def field_sorting_key(x):
-            if x['key'] in self.settings['lang_props'][lang]['other_fields_order']:
-                return (self.settings['lang_props'][lang]['other_fields_order'].index(x['key']),
+            if x['key'] in self.settings.lang_props[lang]['other_fields_order']:
+                return (self.settings.lang_props[lang]['other_fields_order'].index(x['key']),
                         x['key'])
-            return (len(self.settings['lang_props'][lang]['other_fields_order']),
+            return (len(self.settings.lang_props[lang]['other_fields_order']),
                     x['key'])
 
         ana4template = {'lex': '', 'pos': '', 'grdic': '', 'lex_fields': [], 'gr': '', 'other_fields': []}
@@ -197,11 +231,11 @@ class SentenceViewer:
                         grdicValues.append((field[3:], value))
                     else:
                         grValues.append((field[3:], value))
-                elif ('exclude_fields' in self.settings['lang_props'][lang]
-                      and field in self.settings['lang_props'][lang]['exclude_fields']):
+                elif ('exclude_fields' in self.settings.lang_props[lang]
+                      and field in self.settings.lang_props[lang]['exclude_fields']):
                     continue
-                elif ('lexical_fields' in self.settings['lang_props'][lang]
-                      and field in self.settings['lang_props'][lang]['lexical_fields']):
+                elif ('lexical_fields' in self.settings.lang_props[lang]
+                      and field in self.settings.lang_props[lang]['lexical_fields']):
                     # Lexical fields are displayed between the lemma+pos and the gr lines
                     ana4template['lex_fields'].append({'key': field, 'value': value})
                 else:
@@ -209,14 +243,18 @@ class SentenceViewer:
                     ana4template['other_fields'].append({'key': field, 'value': value})
         ana4template['grdic'] = self.build_gr_ana_part(grdicValues, lang, gramdic=True)
         ana4template['gr'] = self.build_gr_ana_part(grValues, lang, gramdic=False)
-        if 'other_fields_order' in self.settings['lang_props'][lang]:
+        if 'other_fields_order' in self.settings.lang_props[lang]:
             ana4template['lex_fields'].sort(key=field_sorting_key)
             ana4template['other_fields'].sort(key=field_sorting_key)
         else:
             # Order analysis fields alphabetically
             ana4template['lex_fields'].sort(key=lambda x: x['key'])
             ana4template['other_fields'].sort(key=lambda x: x['key'])
-        return render_template('analysis_div.html', ana=ana4template).strip()
+        try:
+            return render_template('search_results/analysis_div.html', ana=ana4template).strip()
+        except AttributeError:
+            return self.render_jinja_html('../search/web_app/templates/search_results',
+                                          'analysis_div.html', ana=ana4template).strip()
 
     def build_ana_popup(self, word, lang, matchingAnalyses=None, translit=None):
         """
@@ -235,7 +273,11 @@ class SentenceViewer:
                 ana4template = {'match': iAna in simpleMatchingAnalyses,
                                 'ana_div': self.build_ana_div(simplifiedAnas[iAna], lang, translit=translit)}
                 data4template['analyses'].append(ana4template)
-        return render_template('analyses_popup.html', data=data4template)
+        try:
+            return render_template('search_results/analyses_popup.html', data=data4template)
+        except AttributeError:
+            return self.render_jinja_html('../search/web_app/templates/search_results',
+                                          'analyses_popup.html', data=data4template)
 
     def prepare_analyses(self, words, indexes, lang, matchWordOffsets=None, translit=None):
         """
@@ -268,16 +310,17 @@ class SentenceViewer:
             curClass += ' word '
         if any(wn.startswith('p') for wn in curWords):
             curClass += ' para '
-        if any(wn.startswith('src') for wn in curWords):
+        if not self.fullText and any(wn.startswith('src') for wn in curWords):
             curClass += ' src '
         curClass = curClass.lstrip()
 
         if 'word' in curClass:
             dataAna = self.prepare_analyses(sentSrc['words'], curWords,
                                             lang, matchWordOffsets,
-                                            translit=translit).replace('"', "&quot;").replace('<', '&lt;').replace('>', '&gt;')
+                                            translit=translit)
         else:
             dataAna = ''
+        dataAna = html.escape(dataAna)
 
         def highlightClass(nWord):
             if nWord in matchWordOffsets:
@@ -321,72 +364,55 @@ class SentenceViewer:
         belongs to. Return an HTML string with this data that
         can serve as a header for the context on the output page.
         """
-        if format == 'csv':
-            result = ''
-        else:
-            result = '<span class="context_header" data-meta="">'
         docID = sentSource['doc_id']
         meta = self.sc.get_doc_by_id(docID)
         if (meta is None
                 or 'hits' not in meta
                 or 'hits' not in meta['hits']
-                or len(meta['hits']['hits']) <= 0):
-            return result + '</span>'
-        meta = meta['hits']['hits'][0]
-        if '_source' not in meta:
-            return result + '</span>'
-        meta = meta['_source']
-        if 'title' in meta:
-            if type(meta['title']) == list:
-                meta['title'] = '; '.join(meta['title'])
+                or len(meta['hits']['hits']) <= 0
+                or '_source' not in meta['hits']['hits'][0]):
             if format == 'csv':
+                return ''
+            else:
+                return render_template('search_results/sentence_header.html',
+                                       fulltext_view_enabled=False)
+        meta = meta['hits']['hits'][0]['_source']
+        for k in meta:
+            if type(meta[k]) == list:
+                meta[k] = '; '.join(meta[k])
+            elif type(meta[k]) == int:
+                meta[k] = str(meta[k])
+        dateDisplay = ''
+        if 'year' in meta:
+            dateDisplay = str(meta['year'])
+        elif 'year_from' in meta and 'year_to' in meta:
+            dateDisplay = str(meta['year_from'])
+            if meta['year_to'] != meta['year_from']:
+                dateDisplay += '–' + str(meta['year_to'])
+        metaHtml = render_template('modals/metadata_table.html',
+                                   data={'meta': meta},
+                                   viewable_meta=self.settings.viewable_meta)
+        metaHtml = html.escape(metaHtml)
+
+        if format == 'csv':
+            result = ''
+            if 'title' in meta:
                 result += '"' + meta['title'] + '" '
             else:
-                result += '<span class="ch_title">' + meta['title'] + '</span>'
-        else:
-            if format == 'csv':
                 result += '"???" '
-            else:
-                result += '<span class="ch_title">-</span>'
-        if self.authorMeta in meta:
-            if type(meta[self.authorMeta]) == list:
-                meta[self.authorMeta] = '; '.join(meta[self.authorMeta])
-            if format == 'csv':
+            if self.authorMeta in meta:
                 result += '(' + meta[self.authorMeta] + ') '
-            else:
-                result += '<span class="ch_author">' + meta[self.authorMeta] + '</span>'
-        if 'issue' in meta and len(meta['issue']) > 0:
-            if format == 'csv':
+            if 'issue' in meta and len(meta['issue']) > 0:
                 result += meta['issue'] + ' '
-            else:
-                result += '<span class="ch_date">' + meta['issue'] + '</span>'
-        if 'year_from' in meta and 'year_to' in meta:
-            dateDisplayed = str(meta['year_from'])
-            if meta['year_to'] != meta['year_from']:
-                if format == 'csv':
-                    dateDisplayed += '-' + str(meta['year_to'])
-                else:
-                    dateDisplayed += '&ndash;' + str(meta['year_to'])
-            if format == 'csv':
-                result += '[' + dateDisplayed + ']'
-            else:
-                result += '<span class="ch_date">' + dateDisplayed + '</span>'
-        dataMeta = ''
-        for metaField in self.settings['viewable_meta']:
-            if metaField == 'filename':
-                continue
-            try:
-                metaValue = meta[metaField]
-                if type(metaValue) != str:
-                    metaValue = str(metaValue)
-                dataMeta += metaField + ': ' + metaValue + '\\n'
-            except KeyError:
-                pass
-        dataMeta = dataMeta.replace('"', '&quot;')
-        if len(dataMeta) > 0 and format != 'csv':
-            result = result.replace('data-meta=""', 'data-meta="' + dataMeta + '"')
-        if format != 'csv':
-            result += '</span>'
+            if len(dateDisplay) > 0:
+                result += '[' + dateDisplay + ']'
+        else:
+            result = render_template('search_results/sentence_header.html',
+                                     fulltext_view_enabled=self.settings.fulltext_view_enabled,
+                                     author_meta=self.authorMeta,
+                                     date_display=dateDisplay,
+                                     metaHtml=metaHtml,
+                                     meta=meta)
         return result
 
     def get_word_offsets(self, sSource, numSent, matchOffsets=None):
@@ -433,7 +459,7 @@ class SentenceViewer:
                 offStart, offEnd = pa['off_start'], pa['off_end']
             except KeyError:
                 continue
-            pID = 'p' + pa['para_id'] + str(docID)
+            pID = 'p' + str(pa['para_id']) + str(docID)
             try:
                 offStarts[offStart].add(pID)
             except KeyError:
@@ -453,7 +479,7 @@ class SentenceViewer:
         of the fragments.
         """
         offStarts, offEnds, fragmentInfo = {}, {}, {}
-        if 'src_alignment' not in sSource or 'doc_id' not in sSource:
+        if self.fullText or 'src_alignment' not in sSource or 'doc_id' not in sSource:
             return offStarts, offEnds, fragmentInfo
         docID = sSource['doc_id']
         for iSA in range(len(sSource['src_alignment'])):
@@ -530,10 +556,10 @@ class SentenceViewer:
             mExp = rxSrcFragmentName.search(alignment['src'])
             if mExp is None or mExp.group(1) != mSrc.group(1):
                 continue
-            offsetSrc = (int(mSrc.group(3)) * self.settings['media_length']
-                         + int(mSrc.group(2)) * self.settings['media_length'] / 3)
-            offsetExp = (int(mExp.group(3)) * self.settings['media_length']
-                         + int(mExp.group(2)) * self.settings['media_length'] / 3)
+            offsetSrc = (int(mSrc.group(3)) * self.settings.media_length
+                         + int(mSrc.group(2)) * self.settings.media_length / 3)
+            offsetExp = (int(mExp.group(3)) * self.settings.media_length
+                         + int(mExp.group(2)) * self.settings.media_length / 3)
             difference = offsetExp - offsetSrc
             alignment['src'] = srcFile
             alignment['start'] = str(float(alignment['start']) + difference)
@@ -554,7 +580,7 @@ class SentenceViewer:
         return sDict['languages'][lang]['text']
 
     def transliterate_baseline(self, text, lang, translit=None):
-        if translit is None or lang not in self.settings['languages']:
+        if translit is None or lang not in self.settings.languages:
             return text
         spans = self.rxTextSpans.findall(text)
         translitFuncName = 'trans_' + translit + '_baseline'
@@ -587,10 +613,10 @@ class SentenceViewer:
             if k.endswith('_kw'):
                 continue
             if format == 'csv':
-                metaSpan += (k + ': ' + str(v)).replace('<', '&lt;').replace('<', '&gt;')
+                metaSpan += k + ': ' + str(v)
                 metaSpan += '; '
             else:
-                metaSpan += k + ': ' + str(v)
+                metaSpan += html.escape(k + ': ' + str(v))
                 metaSpan += '<br>'
         if format == 'csv':
             metaSpan = metaSpan.strip('; ') + '] '
@@ -729,9 +755,9 @@ class SentenceViewer:
         text = self.view_sentence_meta(sSource, format) +\
                self.transliterate_baseline(''.join(chars), lang=lang, translit=translit)
         langViewContents = {'text': text, 'highlighted_text': highlightedText}
-        if 'images' in self.settings and self.settings['images'] and 'img' in sSource['meta']:
+        if self.settings.images and 'img' in sSource['meta']:
             langViewContents['img'] = sSource['meta']['img']
-        if 'rtl_languages' in self.settings and langView in self.settings['rtl_languages']:
+        if langView in self.settings.rtl_languages:
             langViewContents['rtl'] = True
         return {'header': header, 'languages': {langView: langViewContents},
                 'toggled_on': relationsSatisfied,
@@ -746,11 +772,11 @@ class SentenceViewer:
         linguistic paper.
         """
         def key_comp(p):
-            if 'gr_fields_order' not in self.settings['lang_props'][lang]:
+            if 'gr_fields_order' not in self.settings.lang_props[lang]:
                 return -1
-            if p[0] not in self.settings['lang_props'][lang]['gr_fields_order']:
-                return len(self.settings['lang_props'][lang]['gr_fields_order'])
-            return self.settings['lang_props'][lang]['gr_fields_order'].index(p[0])
+            if p[0] not in self.settings.lang_props[lang]['gr_fields_order']:
+                return len(self.settings.lang_props[lang]['gr_fields_order'])
+            return self.settings.lang_props[lang]['gr_fields_order'].index(p[0])
 
         def get_ana_gramm(ana):
             grAnaPart = ''
@@ -842,7 +868,7 @@ class SentenceViewer:
         nSents, rank = '', ''   # for now
         if 'hits' not in response or 'total' not in response['hits']:
             return '?', '?', '?', '?'
-        nDocs = str(response['hits']['total'])
+        nDocs = str(response['hits']['total']['value'])
         if 'aggregations' in response and 'agg_freq' in response['aggregations']:
             freq = str(int(response['aggregations']['agg_freq']['sum']))
         else:
@@ -859,6 +885,7 @@ class SentenceViewer:
         freq = str(wSource['freq'])
         rank = str(wSource['rank'])
         nDocs = str(wSource['n_docs'])
+        nForms = 1
         otherFields = []
         if searchType == 'word':
             nSents = str(wSource['n_sents'])
@@ -871,81 +898,102 @@ class SentenceViewer:
             otherFields = self.get_word_table_fields(wSource)
         else:
             nSents = 0
+            if 'n_sents' in wSource:
+                nSents = str(wSource['n_sents'])
             wf = wfDisplay = ''
             otherFields = []
             lemma = self.transliterate_baseline(wSource['wf'], lang=lang, translit=translit)
             gr = ''
-        wID = -1
+            nForms = str(wSource['n_forms'])
         if 'w_id' in w:
-            wID = w['w_id']
+            wID = w['w_id']  # word or lemma found in the sentences index
         else:
-            wID = w['_id']
-        displayFreqRank = True
-        if 'display_freq_rank' in self.settings and not self.settings['display_freq_rank']:
-            displayFreqRank = False
-        displayGr = True
-        if 'word_search_display_gr' in self.settings and not self.settings['word_search_display_gr']:
-            displayGr = False
+            wID = w['_id']  # word or lemma found in the words index
         if searchType == 'word':
-            return render_template('word_table_row.html',
-                                   ana_popup=self.build_ana_popup(wSource, lang, translit=translit).replace('"', "&quot;").replace('<', '&lt;').replace('>', '&gt;'),
+            return render_template('search_results/word_table_row.html',
+                                   ana_popup=html.escape(self.build_ana_popup(wSource, lang, translit=translit)),
                                    wf=wf,
                                    wf_display=wfDisplay,
                                    lemma=lemma,
                                    gr=gr,
-                                   word_search_display_gr=displayGr,
+                                   word_search_display_gr=self.settings.word_search_display_gr,
                                    other_fields=otherFields,
                                    freq=freq,
-                                   display_freq_rank=displayFreqRank,
+                                   display_freq_rank=self.settings.display_freq_rank,
                                    rank=rank,
                                    nSents=nSents,
                                    nDocs=nDocs,
                                    wID=wID,
                                    wfSearch=wSource['wf'])
-        return render_template('lemma_table_row.html',
-                               ana_popup=self.build_ana_popup(wSource, lang, translit=translit).replace('"',
-                                                                                                        "&quot;").replace(
-                                   '<', '&lt;').replace('>', '&gt;'),
+        return render_template('search_results/lemma_table_row.html',
+                               ana_popup=html.escape(self.build_ana_popup(wSource, lang, translit=translit)),
                                wf=wf,
                                wf_display=wfDisplay,
                                lemma=lemma,
                                gr=gr,
-                               word_search_display_gr=displayGr,
+                               word_search_display_gr=self.settings.word_search_display_gr,
                                other_fields=otherFields,
                                freq=freq,
-                               display_freq_rank=displayFreqRank,
+                               display_freq_rank=self.settings.display_freq_rank,
                                rank=rank,
                                nSents=nSents,
                                nDocs=nDocs,
+                               nForms=nForms,
                                lID=wID,
                                wfSearch=wSource['wf'])
 
-    def process_word_subcorpus(self, w, nDocuments, freq, lang, translit=None):
+    def process_word_buckets(self, w, nDocuments, nForms, freq, lang, searchType='word', translit=None):
         """
-        Process one word taken from response['hits']['hits'] for subcorpus
+        Process one word taken from response['hits']['hits'] for subcorpus or lemma
         queries (where frequency data comes separately from the aggregations).
         """
         if '_source' not in w:
             return ''
         wSource = w['_source']
+        if freq is None:
+            # This means total frequency was not present in a subaggregation,
+            # which in turn means no subcorpus was selected. If this is the case,
+            # take the frequency from the word/lemma object itself.
+            if 'freq' in wSource:
+                freq = wSource['freq']
+            else:
+                freq = 0
         freq = str(int(round(freq, 0)))
         rank = ''
         nSents = ''
-        nDocs = str(nDocuments)
-        displayGr = True
-        if 'word_search_display_gr' in self.settings and not self.settings['word_search_display_gr']:
-            displayGr = False
-        return render_template('word_table_row.html',
-                               ana_popup=self.build_ana_popup(wSource, lang, translit=translit).replace('"', "&quot;").replace('<', '&lt;').replace('>', '&gt;'),
-                               wf=self.transliterate_baseline(wSource['wf'], lang=lang, translit=translit),
-                               lemma=self.get_lemma(wSource),
+        if 'n_docs' in wSource and nDocuments < 0:
+            nDocs = str(wSource['n_docs'])
+        else:
+            nDocs = str(nDocuments)
+        if 'n_sents' in wSource:
+            nSents = str(wSource['n_sents'])
+
+        if searchType == 'word':
+            return render_template('search_results/word_table_row.html',
+                                   ana_popup=html.escape(self.build_ana_popup(wSource, lang, translit=translit)),
+                                   wf=self.transliterate_baseline(wSource['wf'], lang=lang, translit=translit),
+                                   lemma=self.get_lemma(wSource),
+                                   gr=self.get_gramm(wSource, lang),
+                                   word_search_display_gr=self.settings.word_search_display_gr,
+                                   freq=freq,
+                                   display_freq_rank=self.settings.display_freq_rank,
+                                   rank=rank,
+                                   nSents=nSents,
+                                   nDocs=nDocs,
+                                   wID=w['_id'],
+                                   wfSearch=wSource['wf'])
+        return render_template('search_results/lemma_table_row.html',
+                               ana_popup=html.escape(self.build_ana_popup(wSource, lang, translit=translit)),
+                               lemma=self.transliterate_baseline(wSource['wf'], lang=lang, translit=translit),
                                gr=self.get_gramm(wSource, lang),
-                               word_search_display_gr=displayGr,
+                               word_search_display_gr=self.settings.word_search_display_gr,
                                freq=freq,
+                               display_freq_rank=self.settings.display_freq_rank,
                                rank=rank,
                                nSents=nSents,
                                nDocs=nDocs,
-                               wID=w['_id'],
+                               nForms=nForms,
+                               lID=w['_id'],
                                wfSearch=wSource['wf'])
 
     def filter_multi_word_highlight_iter(self, hit, nWords=1, negWords=None, keepOnlyFirst=False):
@@ -964,20 +1012,20 @@ class SentenceViewer:
         if keepOnlyFirst:
             for key, ih in hit['inner_hits'].items():
                 if (key in self.w1_labels
-                    and all(hit['inner_hits']['w' + str(iWord + 1) + '_' + key[3:]]['hits']['total'] > 0
+                    and all(hit['inner_hits']['w' + str(iWord + 1) + '_' + key[3:]]['hits']['total']['value'] > 0
                             for iWord in range(1, nWords)
                             if iWord + 1 not in negWords)):
                     yield key, ih
         else:
             for key, ih in hit['inner_hits'].items():
-                if (all(hit['inner_hits'][self.rxHitWordNo.sub(str(iWord + 1), key, 1)]['hits']['total'] > 0
+                if (all(hit['inner_hits'][self.rxHitWordNo.sub(str(iWord + 1), key, 1)]['hits']['total']['value'] > 0
                         for iWord in range(nWords) if iWord + 1 not in negWords)
                         or '_' not in key):
                     yield key, ih
 
     def filter_multi_word_highlight(self, hit, nWords=1, negWords=None, keepOnlyFirst=False):
         """
-        Non-iterative version of filter_multi_word_highlight_iter whic
+        Non-iterative version of filter_multi_word_highlight_iter which
         replaces hits['inner_hits'] dictionary.
         """
         if 'inner_hits' not in hit or nWords <= 1:
@@ -986,10 +1034,13 @@ class SentenceViewer:
                                                                                           negWords=negWords,
                                                                                           keepOnlyFirst=keepOnlyFirst)}
 
-    def add_word_from_sentence(self, hitsProcessed, hit, nWords=1):
+    def add_word_from_sentence(self, hitsProcessed, hit, nWords=1, negWords=None, searchType='word'):
         """
         Extract word data from the highlighted w1 in the sentence and
         add it to the dictionary hitsProcessed.
+        negWords is a list that contains numbers of words in the query
+        whose query was negative.
+        searchType can equal 'word' or 'lemma'.
         """
         if '_source' not in hit or 'inner_hits' not in hit:
             return
@@ -997,25 +1048,41 @@ class SentenceViewer:
         bRelevantWordExists = False
         # self.filter_multi_word_highlight(hit, nWords=nWords, keepOnlyFirst=True)
 
-        for innerHitKey, innerHit in self.filter_multi_word_highlight_iter(hit, nWords=nWords, keepOnlyFirst=True):
+        for innerHitKey, innerHit in self.filter_multi_word_highlight_iter(hit, nWords=nWords,
+                                                                           keepOnlyFirst=True, negWords=negWords):
             # if innerHitKey not in self.w1_labels:
             #     continue
             bRelevantWordExists = True
             for word in innerHit['hits']['hits']:
                 hitsProcessed['total_freq'] += 1
                 word['_source']['lang'] = lang
-                wID = word['_source']['w_id']
-                wf = word['_source']['wf'].lower()
+                if searchType == 'word':
+                    wID = word['_source']['w_id']
+                    wf = word['_source']['wf'].lower()
+                elif searchType == 'lemma':
+                    wID = word['_source']['l_id']
+                    wf = self.get_lemma(word['_source'])
+                else:
+                    wID = 'w0'
+                    wf = ''
                 try:
                     hitsProcessed['word_ids'][wID]['n_occurrences'] += 1
-                    hitsProcessed['word_ids'][wID]['n_sents'] += 1
-                    hitsProcessed['word_ids'][wID]['doc_ids'].add(hit['_source']['doc_id'])
+                    hitsProcessed['word_ids'][wID]['sents'].add(hit['_id'])
+                    hitsProcessed['word_ids'][wID]['docs'].add(hit['_source']['doc_id'])
+                    if searchType == 'lemma':
+                        hitsProcessed['word_ids'][wID]['forms'].add(word['_source']['w_id'])
                 except KeyError:
                     hitsProcessed['n_occurrences'] += 1
-                    hitsProcessed['word_ids'][wID] = {'n_occurrences': 1,
-                                                      'n_sents': 1,
-                                                      'doc_ids': {hit['_source']['doc_id']},
-                                                      'wf': wf}
+                    hitsProcessed['word_ids'][wID] = {
+                        'n_occurrences': 1,
+                        'sents': {hit['_id']},
+                        'docs': {hit['_source']['doc_id']},
+                        'wf': wf
+                    }
+                    if searchType == 'lemma':
+                        hitsProcessed['word_ids'][wID]['forms'] = {word['_source']['w_id']}
+                    elif searchType == 'word':
+                        hitsProcessed['word_ids'][wID]['lemma'] = self.get_lemma(word['_source'])
         if bRelevantWordExists:
             hitsProcessed['n_sentences'] += 1
             hitsProcessed['doc_ids'].add(hit['_source']['doc_id'])
@@ -1027,7 +1094,7 @@ class SentenceViewer:
         """
         if 'ana' not in word:
             return ''
-        if 'keep_lemma_order' not in self.settings or not self.settings['keep_lemma_order']:
+        if not self.settings.keep_lemma_order:
             curLemmata = set()
             for ana in word['ana']:
                 if 'lex' in ana:
@@ -1054,17 +1121,17 @@ class SentenceViewer:
         """
         if 'ana' not in word:
             return ''
-        if 'keep_lemma_order' not in self.settings or not self.settings['keep_lemma_order']:
+        if not self.settings.keep_lemma_order:
             curGramm = set()
             simplifiedAnas, simpleMatchingAnalyses = self.simplify_ana(word['ana'], [])
             for ana in simplifiedAnas:
                 grTagsList = []
                 for field in sorted(ana):
-                        value = ana[field]
-                        if type(value) == list:
-                            value = ', '.join(value)
-                        if field.startswith('gr.'):
-                            grTagsList.append((field[3:], value))
+                    value = ana[field]
+                    if type(value) == list:
+                        value = ', '.join(value)
+                    if field.startswith('gr.'):
+                        grTagsList.append((field[3:], value))
                 grTags = self.build_gr_ana_part_text(grTagsList, lang)
                 if len(grTags) > 0:
                     curGramm.add(grTags)
@@ -1088,10 +1155,8 @@ class SentenceViewer:
         Return a list with values of fields that have to be displayed
         in a word search hits table, along with wordform and lemma.
         """
-        if 'word_table_fields' not in self.settings:
-            return []
         wordTableValues = []
-        for field in self.settings['word_table_fields']:
+        for field in self.settings.word_table_fields:
             if field in ['lex', 'wf']:
                 continue
             curValues = set()
@@ -1114,31 +1179,49 @@ class SentenceViewer:
             wordTableValues.append('/'.join(v for v in sorted(curValues)))
         return wordTableValues
 
-    def process_words_collected_from_sentences(self, hitsProcessed, sortOrder='freq', pageSize=10):
+    def process_words_collected_from_sentences(self, hitsProcessedAll,
+                                               sortOrder='freq', searchType='word',
+                                               startFrom=0, pageSize=10):
         """
-        Process all words collected from the sentences with a multi-word query.
+        Process all words collected from the sentences with a multi-word query. Modify
+        hitsProcessedAll so that hitsProcessedAll['words'] stores data about all
+        words found in the sentences index. Leave only those currently requested
+        in hitsProcessed and return it.
+        searchType can equal 'word' or 'lemma'.
         """
-        for wID, freqData in hitsProcessed['word_ids'].items():
-            word = {'w_id': wID, '_source': {'wf': freqData['wf']}}
-            word['_source']['freq'] = freqData['n_occurrences']
-            word['_source']['rank'] = ''
-            word['_source']['n_sents'] = freqData['n_sents']
-            word['_source']['n_docs'] = len(freqData['doc_ids'])
-            hitsProcessed['words'].append(word)
-        del hitsProcessed['word_ids']
-        self.calculate_ranks(hitsProcessed)
-        if sortOrder == 'freq':
-            hitsProcessed['words'].sort(key=lambda w: (-w['_source']['freq'], w['_source']['wf']))
-        elif sortOrder == 'wf':
-            hitsProcessed['words'].sort(key=lambda w: w['_source']['wf'])
+        if len(hitsProcessedAll['words']) <= 0:
+            # If this is the first time we process these hits, fill
+            # hitsProcessed['words'] based on hitsProcessed['word_ids']
+            for wID, freqData in hitsProcessedAll['word_ids'].items():
+                word = {'w_id': wID, '_source': {'wf': freqData['wf']}}
+                word['_source']['freq'] = freqData['n_occurrences']
+                word['_source']['rank'] = ''
+                word['_source']['n_sents'] = len(freqData['sents'])
+                word['_source']['n_docs'] = len(freqData['docs'])
+                if searchType == 'lemma':
+                    word['_source']['n_forms'] = len(freqData['forms'])
+                elif searchType == 'word':
+                    word['_source']['lemma'] = freqData['lemma']
+                hitsProcessedAll['words'].append(word)
+            del hitsProcessedAll['word_ids']
+            self.calculate_ranks(hitsProcessedAll)
+            if sortOrder == 'freq':
+                hitsProcessedAll['words'].sort(key=lambda w: (-w['_source']['freq'], w['_source']['wf']))
+            elif sortOrder == 'wf' or (searchType == 'lemma' and sortOrder in ('wf', 'lemma')):
+                hitsProcessedAll['words'].sort(key=lambda w: w['_source']['wf'])
+            elif sortOrder == 'lemma' and searchType == 'word':
+                hitsProcessedAll['words'].sort(key=lambda w: w['_source']['lemma'])
         processedWords = []
-        for i in range(min(len(hitsProcessed['words']), pageSize)):
-            word = hitsProcessed['words'][i]
+        for i in range(startFrom, min(len(hitsProcessedAll['words']), startFrom + pageSize)):
+            word = hitsProcessedAll['words'][i]
             wordSource = self.sc.get_word_by_id(word['w_id'])['hits']['hits'][0]['_source']
             wordSource.update(word['_source'])
             word['_source'] = wordSource
-            processedWords.append(self.process_word(word, lang=self.settings['languages'][word['_source']['lang']]))
+            processedWords.append(self.process_word(word, lang=self.settings.languages[word['_source']['lang']],
+                                                    searchType=searchType))
+        hitsProcessed = copy.deepcopy(hitsProcessedAll)
         hitsProcessed['words'] = processedWords
+        return hitsProcessed
 
     def calculate_ranks(self, hitsProcessed):
         """
@@ -1256,21 +1339,27 @@ class SentenceViewer:
             langID = hit['_source']['lang']
         else:
             langID = 0
-        lang = self.settings['languages'][langID]
+        lang = self.settings.languages[langID]
         return langID, lang
 
     def process_sent_json(self, response, translit=None):
-        result = {'n_occurrences': 0, 'n_sentences': 0,
-                  'n_docs': 0, 'page': 1,
-                  'message': 'Nothing found.'}
-        if 'context_header_rtl' in self.settings and self.settings['context_header_rtl']:
-            result['context_header_rtl'] = True
-        if 'hits' not in response or 'total' not in response['hits']:
+        result = {
+            'n_occurrences': 0,
+            'n_sentences': 0,
+            'n_docs': 0,
+            'page': 1,
+            'message': 'Nothing found.',
+            'contexts': [],
+            'languages': [],
+            'too_many_hits': False
+        }
+        result['context_header_rtl'] = self.settings.context_header_rtl
+        if ('hits' not in response or 'total' not in response['hits']
+                or response['hits']['total']['value'] <= 0):
             return result
         result['message'] = ''
-        result['n_sentences'] = response['hits']['total']
-        result['contexts'] = []
-        result['languages'] = []
+        result['n_sentences'] = response['hits']['total']['value']
+        # response['hits']['total']['value'] is limited by 10,000 now, so we'll try to take this value from elsewhere
         resultLanguages = set()
         srcAlignmentInfo = {}
         if 'aggregations' in response:
@@ -1278,6 +1367,7 @@ class SentenceViewer:
                 result['n_docs'] = int(response['aggregations']['agg_ndocs']['value'])
             if result['n_docs'] > 0 and 'agg_nwords' in response['aggregations']:
                 result['n_occurrences'] = int(math.floor(response['aggregations']['agg_nwords']['sum']))
+                result['n_sentences'] = int(math.floor(response['aggregations']['agg_nwords']['count']))
         for iHit in range(len(response['hits']['hits'])):
             langID, lang = self.get_lang_from_hit(response['hits']['hits'][iHit])
             langView = lang
@@ -1297,18 +1387,30 @@ class SentenceViewer:
         if len(srcAlignmentInfo) > 0:
             result['src_alignment'] = json.dumps(srcAlignmentInfo)
         result['languages'] += [l for l in sorted(resultLanguages)]
+        if self.settings.max_hits_retrieve < result['n_sentences']:
+            result['too_many_hits'] = True
         return result
 
-    def process_word_json(self, response, docIDs, searchType='word', translit=None):
+    def process_word_json(self, response, searchType='word', subcorpus=False, translit=None):
+        """
+        Process hits from the words index.
+        """
+        if searchType == 'lemma' or subcorpus:
+            return self.process_word_buckets_json(response, searchType=searchType,
+                                                  translit=translit, subcorpus=subcorpus)
+
         result = {'n_occurrences': 0, 'n_sentences': 0, 'n_docs': 0, 'message': 'Nothing found.'}
         if ('hits' not in response
                 or 'total' not in response['hits']
-                or response['hits']['total'] <= 0):
+                or response['hits']['total']['value'] <= 0):
+            result['total_freq'] = 0
             return result
         result['message'] = ''
-        result['n_occurrences'] = response['hits']['total']
+        # result['n_occurrences'] = response['hits']['total']['value']
+        # response['hits']['total']['value'] is limited by 10,000
+        result['n_occurrences'] = response['aggregations']['agg_noccurrences']['value']
         result['n_docs'] = response['aggregations']['agg_ndocs']['value']
-        result['total_freq'] = response['aggregations']['agg_freq']['value']
+        result['total_freq'] = int(round(response['aggregations']['agg_freq']['value']))
         result['words'] = []
         for iHit in range(len(response['hits']['hits'])):
             langID, lang = self.get_lang_from_hit(response['hits']['hits'][iHit])
@@ -1317,31 +1419,54 @@ class SentenceViewer:
                                                      lang=lang, translit=translit))
         return result
 
-    def process_word_subcorpus_json(self, response, docIDs, translit=None):
+    def process_word_buckets_json(self, response, searchType='word', translit=None, subcorpus=True):
+        """
+        Process hits from the words index by retrieving an object for
+        each bucket in the agg_group_by_word aggregation. This works for
+        lemmata, as well as for any objects searched in a subcorpus.
+        """
         result = {'n_occurrences': 0, 'n_sentences': 0, 'n_docs': 0, 'message': 'Nothing found.'}
         if ('aggregations' not in response
                 or 'agg_freq' not in response['aggregations']
                 or 'value' not in response['aggregations']['agg_freq']
                 or 'hits' not in response
                 or 'total' not in response['hits']
-                or response['hits']['total'] <= 0):
+                or response['hits']['total']['value'] <= 0):
+            result['total_freq'] = 0
             return result
         result['message'] = ''
-        # result['n_occurrences'] = response['hits']['total']
+        # result['n_occurrences'] = response['hits']['total']['value']
         result['n_occurrences'] = response['aggregations']['agg_noccurrences']['value']
         result['n_docs'] = response['aggregations']['agg_ndocs']['value']
         result['total_freq'] = response['aggregations']['agg_freq']['value']
         result['words'] = []
-        for iHit in range(len(response['aggregations']['group_by_word']['buckets'])):
-            wordID = response['aggregations']['group_by_word']['buckets'][iHit]['key']
-            docCount = response['aggregations']['group_by_word']['buckets'][iHit]['doc_count']
-            wordFreq = response['aggregations']['group_by_word']['buckets'][iHit]['subagg_freq']['value']
+        # print(response['aggregations']['agg_group_by_word']['buckets'])
+        for iHit in range(len(response['aggregations']['agg_group_by_word']['buckets'])):
+            if subcorpus:
+                wordID = response['aggregations']['agg_group_by_word']['buckets'][iHit]['key']
+                nForms = response['aggregations']['agg_group_by_word']['buckets'][iHit]['subagg_nforms']['value']
+                docCount = response['aggregations']['agg_group_by_word']['buckets'][iHit]['doc_count']
+            else:
+                wordID = response['aggregations']['agg_group_by_word']['buckets'][iHit]['key']['l_id']
+                nForms = response['aggregations']['agg_group_by_word']['buckets'][iHit]['doc_count']
+                docCount = -1
+            try:
+                # If this was a subcorpus search, then total frequency of
+                # found items comes from word[wtype=word_freq] objects and
+                # therefore is stored in a subaggregation.
+                # If not, it will be taken from the item itself by process_word_buckets.
+                wordFreq = response['aggregations']['agg_group_by_word']['buckets'][iHit]['subagg_freq']['value']
+            except KeyError:
+                wordFreq = None
             hit = self.sc.get_word_by_id(wordID)
             langID, lang = self.get_lang_from_hit(hit['hits']['hits'][0])
-            result['words'].append(self.process_word_subcorpus(hit['hits']['hits'][0],
-                                                               nDocuments=docCount,
-                                                               freq=wordFreq,
-                                                               lang=lang, translit=translit))
+            result['words'].append(self.process_word_buckets(hit['hits']['hits'][0],
+                                                             nDocuments=docCount,
+                                                             nForms=nForms,
+                                                             freq=wordFreq,
+                                                             lang=lang,
+                                                             searchType=searchType,
+                                                             translit=translit))
         return result
 
     def process_docs_json(self, response, exclude=None, corpusSize=1):
@@ -1351,12 +1476,12 @@ class SentenceViewer:
                   'metafields': [field for field in self.sc.qp.docMetaFields if not field.endswith('_kw')]}
         if ('hits' not in response
                 or 'total' not in response['hits']
-                or response['hits']['total'] <= 0):
+                or response['hits']['total']['value'] <= 0):
             return result
         if corpusSize <= 0:
             corpusSize = 1
         result['message'] = ''
-        result['n_docs'] = response['hits']['total']
+        result['n_docs'] = response['hits']['total']['value']
         result['n_words'] = int(round(response['aggregations']['agg_nwords']['value'], 0))
         result['docs'] = []
         for iHit in range(len(response['hits']['hits'])):
@@ -1369,7 +1494,7 @@ class SentenceViewer:
 
     def extract_cumulative_freq_by_rank(self, hits):
         """
-        Process search results that contain buckets with frequency rank. Each
+        Process search results that contain buckets with word frequency rank. Each
         bucket contains the total frequency of a word of a given frequency rank.
         Buckets should be ordered by frequency rank.
         Return a dictionary of the kind {frequency rank: total frequency of the words
@@ -1382,6 +1507,10 @@ class SentenceViewer:
         cumulFreq = 0
         freqByRank = {}
         for bucket in hits['aggregations']['agg_rank']['buckets']:
-            cumulFreq += bucket['doc_count']
+            if 'subagg_nlemmata' in bucket:
+                # Subaggregation for word-based lemma frequency search
+                cumulFreq += bucket['subagg_nlemmata']['value']
+            else:
+                cumulFreq += bucket['doc_count']
             freqByRank[bucket['key']] = cumulFreq
         return freqByRank

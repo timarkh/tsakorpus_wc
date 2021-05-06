@@ -18,38 +18,34 @@ class InterfaceQueryParser:
                      '&': 'must',
                      '|': 'should'}
 
-    def __init__(self, settings_dir, rp=None):
-        f = open(os.path.join(settings_dir, 'categories.json'),
-                 'r', encoding='utf-8-sig')
-        self.gramDict = json.loads(f.read())
-        f.close()
-        f = open(os.path.join(settings_dir, 'corpus.json'),
-                 'r', encoding='utf-8-sig')
-        self.settings = json.loads(f.read())
-        f.close()
+    def __init__(self, settings_dir, settings, rp=None):
+        with open(os.path.join(settings_dir, 'categories.json'),
+                  'r', encoding='utf-8-sig') as fIn:
+            self.gramDict = json.loads(fIn.read())
+        self.settings = settings
 
         self.rxSimpleText = re.compile('^[^\\[\\]()*\\\\{}^$.?+~|,&]*$')
         self.rxBooleanText = re.compile('^[^\\[\\]()\\\\{}^$.+|]*$')
-        if 'regex_simple_search' in self.settings:
-            self.rxSimpleText = re.compile(self.settings['regex_simple_search'])
-
-        if 'word_fields' in self.settings:
-            self.wordFields = self.settings['word_fields']
-        else:
-            self.wordFields = []
+        if self.settings.regex_simple_search is not None and len(self.settings.regex_simple_search) > 0:
+            self.rxSimpleText = re.compile(self.settings.regex_simple_search)
+        self.wordFields = self.settings.word_fields
         self.wr = WordRelations(settings_dir, rp=rp)
         self.docMetaFields = ['author', 'title', 'genre']
-        if 'viewable_meta' in self.settings:
-            self.docMetaFields += [f for f in self.settings['viewable_meta']
-                                   if f not in self.docMetaFields and f != 'filename']
-        if 'search_meta' in self.settings and 'stat_options' in self.settings['search_meta']:
-            self.docMetaFields += [f for f in self.settings['search_meta']['stat_options']
-                                   if f not in self.docMetaFields and f != 'filename']
-        kwMetaFields = [f + '_kw' for f in self.docMetaFields if not f.startswith('year')]
+        self.docMetaFields += [f for f in self.settings.viewable_meta
+                               if f not in self.docMetaFields and f != 'filename'
+                               and f not in settings.sentence_meta]
+        self.docMetaFields += [f for f in self.settings.search_meta['stat_options']
+                               if f not in self.docMetaFields and f != 'filename'
+                               and f not in settings.sentence_meta]
+        kwMetaFields = [f + '_kw' for f in self.docMetaFields
+                        if not f.startswith('year')
+                        and f not in self.settings.integer_meta_fields]
         self.docMetaFields += kwMetaFields
         self.rp = rp    # ResponseProcessor instance
         # for g in self.gramDict:
         #     self.gramDict[g] = 'ana.gr.' + self.gramDict[g]
+
+        self.maxFreqRank = 10000    # Number of buckets for queries with rank aggregation
 
     @staticmethod
     def find_operator(strQuery, start=0, end=-1, glossField=False):
@@ -124,10 +120,10 @@ class InterfaceQueryParser:
             if len(glossTag) <= 0:
                 return '[^{}]*\\{(' + self.make_gloss_query_src_part(glossSrc, lang) + ')\\}[\\-=<>]'
             return '(' + glossTag + ')\\{(' + self.make_gloss_query_src_part(glossSrc, lang) + ')\\}[\\-=<>]'
-        if ('lang_props' in self.settings and lang in self.settings['lang_props']
-                and 'gloss_shortcuts' in self.settings['lang_props'][lang]
-                and text in self.settings['lang_props'][lang]['gloss_shortcuts']):
-            text = self.settings['lang_props'][lang]['gloss_shortcuts'][text]
+        if (lang in self.settings.lang_props
+                and 'gloss_shortcuts' in self.settings.lang_props[lang]
+                and text in self.settings.lang_props[lang]['gloss_shortcuts']):
+            text = self.settings.lang_props[lang]['gloss_shortcuts'][text]
             return '(' + text + ')\\{[^{}]+\\}[\\-=<>]'
         return '(' + text.replace('.', '\\.') + ')\\{[^{}]+\\}[\\-=<>]'
 
@@ -162,7 +158,7 @@ class InterfaceQueryParser:
         elif keyword_query:
             return {'match': {field: text}}
         elif not (field == 'ana.gr' or field.endswith('.ana.gr')):
-            if field in self.settings['viewable_meta']:
+            if field in self.settings.viewable_meta:
                 text = text.lower()
             elif field == 'w_id':
                 field = '_id'   # search for word ID: _id in words index, but words.w_id in sentences index
@@ -182,7 +178,12 @@ class InterfaceQueryParser:
             field += '.' + self.gramDict[lang][text]
             return {'match': {field: text}}
         except KeyError:
-            return {}
+            if (lang in self.settings.lang_props
+                    and 'gramm_shortcuts' in self.settings.lang_props[lang]
+                    and text in self.settings.lang_props[lang]['gramm_shortcuts']):
+                text = self.settings.lang_props[lang]['gramm_shortcuts'][text]
+                return self.make_simple_term_query(text, field, lang, keyword_query=keyword_query)
+        return {'match_none': {}}
 
     def make_bool_query(self, strQuery, field, lang, start=0, end=-1, keyword_query=False):
         """
@@ -196,9 +197,8 @@ class InterfaceQueryParser:
             if type(strQuery) == int:
                 return self.make_simple_term_query(strQuery, field, lang, keyword_query=True)
             if not keyword_query:
-                if ('search_remove_whitespaces' not in self.settings
-                    or self.settings['search_remove_whitespaces']):
-                        strQuery = strQuery.replace(' ', '')
+                if self.settings.search_remove_whitespaces:
+                    strQuery = strQuery.replace(' ', '')
             else:
                 strQuery = strQuery.strip()
                 if '|' not in strQuery and '~' not in strQuery:
@@ -234,7 +234,11 @@ class InterfaceQueryParser:
             else:
                 mustNotClause = self.make_bool_query(strQuery, field, lang,
                                                      start=start+1, end=end)
-            return {'bool': {'must_not': mustNotClause}}
+            return {
+                'bool': {
+                    'must_not': mustNotClause
+                }
+            }
         return {}
 
     def make_range_query(self, listQuery, field):
@@ -288,19 +292,19 @@ class InterfaceQueryParser:
         if constantScore is None:
             if sortOrder != 'random':
                 esQuery = {'nested': {'path': nestedPath,
-                                      'query': {'constant_score': {'query': query, 'boost': 1}},
+                                      'query': {'constant_score': {'filter': query, 'boost': 1}},
                                       'score_mode': 'sum'}}
             else:
                 esQuery = {'nested': {'path': nestedPath,
                                       'query': query}}
         else:
             esQuery = {'nested': {'path': nestedPath,
-                                  'query': {'constant_score': {'query': query, 'boost': constantScore}},
+                                  'query': {'constant_score': {'filter': query, 'boost': constantScore}},
                                   'score_mode': 'sum'}}
-        if highlightFields is not None:
+        if highlightFields is not None and len(highlightFields) > 0:
             esQuery['nested']['inner_hits'] = {'highlight':
                                                {'fields':
-                                                {f: {'number_of_fragments': 50,
+                                                {f: {'number_of_fragments': 100,
                                                      'fragment_size': 2048}
                                                  for f in highlightFields}},
                                                'size': 50}
@@ -308,36 +312,22 @@ class InterfaceQueryParser:
                 esQuery['nested']['inner_hits']['name'] = queryName
         return esQuery
 
-    def wrap_inner_word_query(self, innerQuery, query_from=0, query_size=10,
-                              sortOrder='random', randomSeed=None, docIDs=None):
+    def prepare_word_order_subquery(self, sortOrder='random',
+                                    groupBy='word', subcorpus=False):
         """
-        Make a full-fledged Elasticsearch word query out of the contents
-        of the "query" parameter and additional options. Specifically,
-        turn the query into a word_freq query with necessary aggregations
-        if the search is limited to a subcorpus (i.e. docIDs is not None).
-        Return the Elasticsearch query.
+        Return a dictionary containing a part of a word query
+        responsible for sorting of the hits and, if needed, relevant
+        subaggregations. Different search types (lemma vs. word,
+        entire corpus vs. subcorpus) use different methods
+        (simple search, bucketing, or subaggregations) and
+        therefore require different types of ordering conditions.
+        If no ordering clause is required, return None.
         """
-        if docIDs is None:
-            if sortOrder == 'random':
-                innerQuery = self.make_random(innerQuery, randomSeed=randomSeed)
-            esQuery = {'query': innerQuery, 'size': query_size, 'from': query_from,
-                       '_source': {'excludes': ['sids']}}
-            esQuery['aggs'] = {'agg_ndocs': {'cardinality': {'field': 'dids'}},
-                               'agg_freq': {'sum': {'field': 'freq'}}}
-            if sortOrder == 'wf':
-                esQuery['sort'] = {'wf_order': {'order': 'asc'}}
-            elif sortOrder == 'lemma':
-                esQuery['sort'] = {'l_order': {'order': 'asc'}}
-            elif sortOrder == 'freq':
-                esQuery['sort'] = {'freq': {'order': 'desc'}}
-        else:
-            hasParentQuery = {'parent_type': 'word', 'score': True, 'query': innerQuery}
-            innerWordFreqQuery = {'bool': {'must': [{'has_parent': hasParentQuery}],
-                                           'filter': [{'terms': {'d_id': docIDs}}]}}
-            if sortOrder == 'random':
-                innerWordFreqQuery = self.make_random(innerWordFreqQuery, randomSeed=randomSeed)
-            subAggregations = {'subagg_freq': {'sum': {'field': 'freq'}}}
-            order = {}
+        order = None
+        subAggregations = None
+        if subcorpus:
+            subAggregations = {'subagg_freq': {'sum': {'field': 'freq'}},
+                               'subagg_nforms': {'cardinality': {'field': 'w_id'}}}
             if sortOrder == 'wf':
                 subAggregations['subagg_wf'] = {'max': {'field': 'wf_order'}}
                 order = {'subagg_wf': 'asc'}
@@ -346,23 +336,134 @@ class InterfaceQueryParser:
                 order = {'subagg_lemma': 'asc'}
             elif sortOrder == 'freq':
                 order = {'subagg_freq': 'desc'}
-            mainAgg = {'group_by_word': {'terms': {'field': 'w_id',
-                                                   'size': query_size}},
-                       'agg_freq': {'sum': {'field': 'freq'}},
-                       'agg_noccurrences': {'cardinality': {'field': 'w_id'}},
+        else:
+            if groupBy == 'word':
+                if sortOrder == 'wf':
+                    order = {'wf_order': {'order': 'asc'}}
+                elif sortOrder == 'lemma':
+                    order = {'l_order': {'order': 'asc'}}
+                elif sortOrder == 'freq':
+                    order = {'freq': {'order': 'desc'}}
+            elif groupBy == 'lemma':
+                if sortOrder in ('wf', 'lemma'):
+                    order = {'l_order': {'terms': {'field': 'l_order'}}}
+                elif sortOrder == 'freq':
+                    order = {'lemma_freq': {'terms': {'field': 'lemma_freq', 'order': 'desc'}}}
+        return order, subAggregations
+
+    def composite_agg_word(self, query_size, order=None, groupBy='lemma', after_key=None):
+        """
+        Return a composite aggregation whose buckets should correspond
+        to words or lemmata. (For now, we use this only for lemma queries
+        in the entire corpus.)
+        """
+        agg = None
+        if groupBy == 'lemma':
+            agg = {
+                'composite': {
+                    'size': query_size,
+                    'sources': [
+                        {
+                            'l_id': {
+                                'terms': {
+                                    'field': 'l_id'
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+            if after_key is not None:
+                # For pagination
+                agg['composite']['after'] = after_key
+            if order is not None:
+                agg['composite']['sources'].insert(0, order)
+        return agg
+
+    def wrap_inner_word_query(self, innerQuery, query_from=0, query_size=10,
+                              sortOrder='random', randomSeed=None, docIDs=None,
+                              groupBy='word', after_key=None):
+        """
+        Make a full-fledged Elasticsearch word query out of the contents
+        of the "query" parameter and additional options. Specifically,
+        turn the query into a word[wtype=word_freq] query with necessary aggregations
+        if the search is limited to a subcorpus (i.e. docIDs is not None).
+        Return the Elasticsearch query.
+        """
+        subcorpus = (docIDs is not None)
+        order, subAggregations = self.prepare_word_order_subquery(sortOrder, groupBy, subcorpus)
+        if subcorpus or groupBy == 'lemma':
+            # We need the buckets, not the hits
+            query_from = 0
+
+        if not subcorpus:
+            if sortOrder == 'random':
+                innerQuery = self.make_random(innerQuery, randomSeed=randomSeed)
+            esQuery = {
+                'query': innerQuery,
+                'size': query_size,
+                'from': query_from,
+                '_source': {'excludes': ['sids']}
+            }
+            esQuery['aggs'] = {
+                'agg_ndocs': {'cardinality': {'field': 'dids'}},
+                'agg_freq': {'sum': {'field': 'freq'}},
+                'agg_noccurrences': {'value_count': {'field': '_id'}}
+            }
+            if groupBy == 'lemma':
+                esQuery['size'] = 0
+                esQuery['aggs']['agg_noccurrences'] = {'cardinality': {'field': 'l_id'}}
+                esQuery['aggs']['agg_group_by_word'] = self.composite_agg_word(query_size, order, groupBy, after_key)
+            elif groupBy == 'word' and order is not None:
+                esQuery['sort'] = order
+        else:
+            hasParentQuery = {'parent_type': 'word', 'score': True, 'query': innerQuery}
+            innerWordFreqQuery = {
+                'bool': {
+                    'must': [
+                        {'has_parent': hasParentQuery},
+                        {'term': {'wtype': 'word_freq'}}
+                    ],
+                    'filter': [{
+                        'terms': {'d_id': docIDs}
+                    }]
+                }
+            }
+            if sortOrder == 'random':
+                innerWordFreqQuery = self.make_random(innerWordFreqQuery, randomSeed=randomSeed)
+            mainAgg = {'agg_freq': {'sum': {'field': 'freq'}},
                        'agg_ndocs': {'cardinality': {'field': 'd_id'}}}
-            if len(subAggregations) > 0:
-                mainAgg['group_by_word']['aggs'] = subAggregations
-            if len(order) > 0:
-                mainAgg['group_by_word']['terms']['order'] = order
+            if groupBy == 'word':
+                mainAgg['agg_group_by_word'] = {
+                    'terms': {
+                        'field': 'w_id',
+                        'size': query_size
+                    }
+                }
+                mainAgg['agg_noccurrences'] = {'cardinality': {'field': 'w_id'}}
+            elif groupBy == 'lemma':
+                mainAgg['agg_group_by_word'] = {
+                    'terms': {
+                        'field': 'l_id',
+                        'size': query_size
+                    }
+                }
+                mainAgg['agg_noccurrences'] = {'cardinality': {'field': 'l_id'}}
+            if subAggregations is not None:
+                mainAgg['agg_group_by_word']['aggs'] = subAggregations
+            if order is not None:
+                mainAgg['agg_group_by_word']['terms']['order'] = order
             esQuery = {'query': innerWordFreqQuery, 'size': 0, 'aggs': mainAgg}
+        # print(esQuery)
         return esQuery
 
     def full_word_query(self, queryDict, query_from=0, query_size=10, sortOrder='random',
-                        randomSeed=None, lang=-1):
+                        randomSeed=None, lang=-1, groupBy='word', after_key=None):
         """
         Make a full ES query for the words index out of a dictionary
         with bool queries.
+        If groupBy == 'word', search for words (objects with wtype='word'),
+        if groupBy == 'lemma', search for lemmata.
         """
         wordAnaFields = {'ana.lex', 'ana.gr', 'ana.gloss_index'}
         for field in self.wordFields:
@@ -420,6 +521,16 @@ class InterfaceQueryParser:
                     query['bool']['must'] = [{'term': {'lang': lang}}]
                 else:
                     query['bool']['must'].append({'term': {'lang': lang}})
+            # Do not look for the empty word or empty lemma, which have indexes of w0 and l0
+            emptyItem = 'w0'    # for words
+            idField = 'w_id'
+            if groupBy == 'lemma':
+                emptyItem = 'l0'
+                idField = 'l_id'
+            if 'must_not' not in query['bool']:
+                query['bool']['must_not'] = [{'term': {idField: emptyItem}}]
+            else:
+                query['bool']['must_not'].append({'term': {idField: emptyItem}})
             # if docIDs is not None:
             #     if 'filter' not in query['bool']:
             #         query['bool']['filter'] = [{'terms': {'dids': docIDs}}]
@@ -428,7 +539,9 @@ class InterfaceQueryParser:
         esQuery = self.wrap_inner_word_query(query, query_from=query_from,
                                              query_size=query_size, sortOrder=sortOrder,
                                              randomSeed=randomSeed,
-                                             docIDs=docIDs)
+                                             docIDs=docIDs,
+                                             groupBy=groupBy,
+                                             after_key=after_key)
         return esQuery
 
     def sentence_index_query(self, sentIndex, mustNot=False, countFromEnd=False):
@@ -568,7 +681,7 @@ class InterfaceQueryParser:
                                                    searchOutput=searchOutput)
         else:
             nPivotalTerm, constraints = self.wr.find_pivotal_term(distances)
-            for pivotalTermIndex in range(self.settings['max_words_in_sentence']):
+            for pivotalTermIndex in range(self.settings.max_words_in_sentence):
                 distanceQueryTuple = []
                 for iQueryWord in range(len(queryDict['words'])):
                     wordDesc, negQuery = queryDict['words'][iQueryWord]
@@ -604,7 +717,8 @@ class InterfaceQueryParser:
     def full_sentence_query(self, queryDict, query_from=0, query_size=10,
                             sortOrder='random', randomSeed=None, lang=0,
                             searchOutput='sentences', distances=None,
-                            includeNextWordField=False):
+                            includeNextWordField=False,
+                            highlight=True):
         """
         Make a full ES query for the sentences index out of a dictionary
         with bool queries.
@@ -646,13 +760,11 @@ class InterfaceQueryParser:
                     k = 'meta.' + k[10:]
                     if k.endswith('_kw'):
                         boolQuery = self.make_bool_query(v, k, lang=lang, keyword_query=True)
-                    elif (k.endswith('_TO')
-                          and 'integer_meta_fields' in self.settings
-                          and k[5:len(k)-3] in self.settings['integer_meta_fields']):
+                    elif (k.endswith('__to')
+                          and k[5:len(k)-3] in self.settings.integer_meta_fields):
                         boolQuery = self.make_range_query([None, v], k[:-3])
-                    elif (k.endswith('_FR')
-                          and 'integer_meta_fields' in self.settings
-                          and k[5:len(k)-3] in self.settings['integer_meta_fields']):
+                    elif (k.endswith('__from')
+                          and k[5:len(k)-3] in self.settings.integer_meta_fields):
                         boolQuery = self.make_range_query([v, None], k[:-3])
                     else:
                         boolQuery = self.make_bool_query(v, k, lang=lang)
@@ -662,18 +774,28 @@ class InterfaceQueryParser:
             # Combine the query with the filters:
             query = {'bool': {'must': query, 'filter': queryFilter}}
 
-        if sortOrder == 'random':
+        if sortOrder in ('random', 'year'):
             query = self.make_random(query, randomSeed)
-        elif sortOrder == 'freq':
+        elif sortOrder != 'no':
             query = self.make_half_random(query, randomSeed)
+
         esQuery = {'query': query, 'size': query_size, 'from': query_from}
+        if sortOrder == 'year':
+            esQuery['sort'] = [
+                {
+                    'meta.year': {
+                        "order": "desc"
+                    }
+                },
+                '_score'
+            ]
         if searchOutput == 'words':
             esQuery['_source'] = ['doc_id', 'lang']
             if includeNextWordField:
                 esQuery['_source'] += ['words.wtype', 'words.next_word']
         esQuery['aggs'] = {'agg_ndocs': {'cardinality': {'field': 'doc_id'}},
                            'agg_nwords': {'stats': {'script': '_score'}}}
-        if len(queryDictTop) >= 0:
+        if len(queryDictTop) > 0 and highlight:
             esQuery['highlight'] = {'fields': {f: {'number_of_fragments': 100,
                                                    'fragment_size': 2048}
                                                for f in queryDictTop}}
@@ -687,6 +809,7 @@ class InterfaceQueryParser:
         query = {'function_score': {'query': query,
                                     'boost_mode': 'replace',
                                     'random_score': {}}}
+
         if randomSeed is not None:
             query['function_score']['random_score']['seed'] = str(randomSeed)
         return query
@@ -711,11 +834,24 @@ class InterfaceQueryParser:
         fields in htmlQuery.
         """
         queryParts = []
+        rangeQueriesFrom = {}
+        rangeQueriesTo = {}
         for field in self.docMetaFields:
             if field in ('year_from', 'year_to'):
                 continue
-            if field in htmlQuery and (type(htmlQuery[field]) == int or len(htmlQuery[field]) > 0):
+            elif field in htmlQuery and (type(htmlQuery[field]) == int or len(htmlQuery[field]) > 0):
                 queryParts.append(self.make_bool_query(htmlQuery[field], field, 'all', keyword_query=True))
+            elif (field + '__from' in htmlQuery
+                  and (type(htmlQuery[field + '__from']) == int
+                       or len(htmlQuery[field + '__from']) > 0)):
+                rangeQueriesFrom[field] = htmlQuery[field]
+            elif (field + '__to' in htmlQuery
+                  and (type(htmlQuery[field + '__to']) == int
+                       or len(htmlQuery[field + '__to']) > 0)):
+                rangeQueriesTo[field] = htmlQuery[field]
+        # Deal with year range queries (this can be tricky because the lower bound
+        # has to be compared to year_from, but the upper bound has to be compared
+        # to year_to in case there are two fields for the approximate date of creation)
         yearFrom, yearTo = None, None
         if 'year_from' in htmlQuery and (type(htmlQuery['year_from']) == int or len(htmlQuery['year_from']) > 0):
             yearFrom = htmlQuery['year_from']
@@ -729,6 +865,16 @@ class InterfaceQueryParser:
                     queryParts.append(self.make_range_query([None, yearTo], 'year_to'))
             elif 'year' in self.docMetaFields:
                 queryParts.append(self.make_range_query([yearFrom, yearTo], 'year'))
+        # Now deal with the rest of ranged fields (...__from and ...__to in the HTML query)
+        for field in set(f for f in rangeQueriesFrom) | set(f for f in rangeQueriesTo):
+            if field in rangeQueriesFrom:
+                if field in rangeQueriesTo:
+                    queryParts.append(self.make_range_query([rangeQueriesFrom[field], rangeQueriesTo[field]], field))
+                else:
+                    queryParts.append(self.make_range_query([rangeQueriesFrom[field], None], field))
+            else:
+                queryParts.append(self.make_range_query([None, rangeQueriesTo[field]], field))
+        # Remove manually excluded documents by ID
         if exclude is not None and len(exclude) > 0:
             queryParts.append({'bool': {'must_not': [{'terms': {'_id': list(exclude)}}]}})
         if len(queryParts) > 0:
@@ -759,11 +905,11 @@ class InterfaceQueryParser:
         for iWord in range(int(htmlQuery['n_words'])):
             strWordNum = str(iWord + 1)
             if ('lang' + strWordNum not in htmlQuery
-                    or htmlQuery['lang' + strWordNum] not in self.settings['languages']):
+                    or htmlQuery['lang' + strWordNum] not in self.settings.languages):
                 return None
             else:
                 lang = htmlQuery['lang' + strWordNum]
-                langID = str(self.settings['languages'].index(lang))
+                langID = str(self.settings.languages.index(lang))
             if langID not in langQueryParts:
                 langQueryParts[langID] = {k: v for k, v in htmlQuery.items()
                                           if self.rxFieldNum.search(k) is None}
@@ -793,6 +939,20 @@ class InterfaceQueryParser:
         esQuery['_source'] = 'para_ids'
         return esQuery
 
+    def remove_nonsense(self, htmlQuery):
+        """
+        Remove parameters that are logically impossible in the given context.
+        """
+        # No distance requirements for negative word queries
+        for iWord in range(int(htmlQuery['n_words'])):
+            strWordNum = str(iWord + 1)
+            if 'negq' + strWordNum in htmlQuery:
+                for k in [_ for _ in htmlQuery.keys()]:
+                    if k.startswith(('word_rel_' + strWordNum + '_',
+                                     'word_dist_from_' + strWordNum + '_',
+                                     'word_dist_to_' + strWordNum + '_')):
+                        del htmlQuery[k]
+
     def check_html_parameters(self, htmlQuery, page=1, query_size=10, searchOutput='sentences'):
         """
         Check if HTML query is valid. If so, calculate and return a number
@@ -802,21 +962,25 @@ class InterfaceQueryParser:
         if len(htmlQuery) <= 0 or 'n_words' not in htmlQuery:
             return None, None, None, None
         query_from = (page - 1) * query_size
-        if 'lang1' not in htmlQuery or htmlQuery['lang1'] not in self.settings['languages']:
-            if self.settings['all_language_search_enabled']:
+        if 'lang1' not in htmlQuery or htmlQuery['lang1'] not in self.settings.languages:
+            if self.settings.all_language_search_enabled:
                 lang = 'all'
                 langID = -1
             else:
                 return None, None, None, None
         else:
             lang = htmlQuery['lang1']
-            langID = self.settings['languages'].index(lang)
+            langID = self.settings.languages.index(lang)
         if int(htmlQuery['n_words']) > 1:
             searchIndex = 'sentences'
         elif ('sentence_index1' in htmlQuery
                 and len(htmlQuery['sentence_index1']) > 0
                 and self.rxNumber.search(htmlQuery['sentence_index1']) is not None
                 and int(htmlQuery['sentence_index1']) != 0):
+            searchIndex = 'sentences'
+        elif any(k.startswith('sent_meta_')
+                 and len(htmlQuery[k]) > 0 and htmlQuery[k] not in ('*', '.*')
+                 for k in htmlQuery):
             searchIndex = 'sentences'
         else:
             searchIndex = searchOutput
@@ -826,8 +990,9 @@ class InterfaceQueryParser:
         return query_from, langID, lang, searchIndex
 
     def html2es(self, htmlQuery, page=1, query_size=10, sortOrder='random',
-                randomSeed=None, searchOutput='sentences', distances=None,
-                includeNextWordField=False):
+                randomSeed=None, searchOutput='sentences', groupBy='word',
+                distances=None, includeNextWordField=False,
+                after_key=None, highlight=True):
         """
         Make and return a ES query out of the HTML form data.
         """
@@ -835,6 +1000,9 @@ class InterfaceQueryParser:
             self.check_html_parameters(htmlQuery, page, query_size, searchOutput)
         if query_from is None:
             return {'query': {'match_none': ''}}
+
+        self.remove_nonsense(htmlQuery)
+        # print(htmlQuery)
 
         prelimQuery = {'words': []}
         if searchIndex == 'sentences':
@@ -851,7 +1019,7 @@ class InterfaceQueryParser:
         if searchIndex == 'sentences' and 'para_ids' in htmlQuery:
             prelimQuery['para_ids'] = htmlQuery['para_ids']
 
-        if 'detect_lemma_queries' in self.settings and self.settings['detect_lemma_queries']:
+        if self.settings.detect_lemma_queries:
             # Check if this is a query which means "Find all forms
             # of a particular lemma (possibly with additional constraints".
             # If it is, remove the cap on the number of forms found.
@@ -869,6 +1037,12 @@ class InterfaceQueryParser:
             if searchIndex == 'sentences':
                 curPrelimQuery[pathPfx + 'wtype'] = self.make_bool_query('word',
                                                                          pathPfx + 'wtype', lang)
+            elif searchIndex == 'words':
+                curWtype = 'word'
+                if 'wtype' + strWordNum in htmlQuery:
+                    curWtype = htmlQuery['wtype' + strWordNum]
+                curPrelimQuery[pathPfx + 'wtype'] = self.make_bool_query(curWtype,
+                                                                         pathPfx + 'wtype', lang)
             for field in ['wf', 'w_id', 'l_id']:
                 if field + strWordNum in htmlQuery and len(htmlQuery[field + strWordNum]) > 0:
                     curPrelimQuery[pathPfx + field] = self.make_bool_query(htmlQuery[field + strWordNum],
@@ -885,9 +1059,14 @@ class InterfaceQueryParser:
                     sentIndex = -int(htmlQuery['sentence_index' + strWordNum]) - 1
                     curPrelimQuery[pathPfx + 'sentence_index_neg'] = self.make_bool_query(sentIndex,
                                                                                           pathPfx + 'sentence_index_neg', lang)
-            if 'n_ana' + strWordNum in htmlQuery and htmlQuery['n_ana' + strWordNum] != 'any':
-                curPrelimQuery[pathPfx + 'n_ana'] = self.make_n_ana_query(htmlQuery['n_ana' + strWordNum],
+            if groupBy == 'lemma':
+                # only look for words with analyses
+                curPrelimQuery[pathPfx + 'n_ana'] = self.make_n_ana_query('analyzed',
                                                                           pathPfx + 'n_ana')
+            if 'n_ana' + strWordNum in htmlQuery and htmlQuery['n_ana' + strWordNum] != 'any':
+                if groupBy != 'lemma' or htmlQuery['n_ana' + strWordNum] != 'none':
+                    curPrelimQuery[pathPfx + 'n_ana'] = self.make_n_ana_query(htmlQuery['n_ana' + strWordNum],
+                                                                              pathPfx + 'n_ana')
             for anaField in ['lex', 'gr', 'gloss_index'] + self.wordFields:
                 if (anaField + strWordNum in htmlQuery
                         and len(htmlQuery[anaField + strWordNum]) > 0):
@@ -916,21 +1095,15 @@ class InterfaceQueryParser:
                                                  lang=langID,
                                                  searchOutput=searchOutput,
                                                  distances=distances,
-                                                 includeNextWordField=includeNextWordField)
+                                                 includeNextWordField=includeNextWordField,
+                                                 highlight=highlight)
         elif searchIndex == 'words':
             queryDict = self.full_word_query(prelimQuery, query_from, query_size, sortOrder,
-                                             randomSeed, lang=langID)
+                                             randomSeed, lang=langID, groupBy=groupBy,
+                                             after_key=after_key)
         else:
             queryDict = {'query': {'match_none': ''}}
         return queryDict
-
-    def lemmatize_word_query(self, esQuery):
-        """
-        Make a lemma query out of a word query.
-        Change the original query, do not return anything.
-        """
-        childQuery = {'has_child': {'type': 'word', 'query': esQuery['query']}}
-        esQuery['query'] = {'bool': {'must': childQuery, 'must_not': {'match': {'_id': 0}}}}
 
     def word_freqs_query(self, htmlQuery, searchType='word'):
         """
@@ -939,17 +1112,54 @@ class InterfaceQueryParser:
         query are ignored.
         """
         htmlQuery['n_words'] = 1
+        wfFields = False
+        # wfFields tells if the query contains fields that can
+        # have different values for different forms of the same
+        # lexeme. If it does and searchType == 'lemma', join
+        # has to be used.
         for k in [_ for _ in htmlQuery.keys()]:
             if k not in ('n_words', 'lang', 'lang1') and re.search('[^0-9]1$', k) is None:
                 del htmlQuery[k]
             elif re.search('^sentence_index', k) is not None:
                 del htmlQuery[k]
+            elif k not in ('n_words', 'lang', 'lang1', 'lex1'):
+                if k == 'n_ana1' and htmlQuery[k] in ('any', 'analyzed'):
+                    continue
+                if k == 'wf1' and htmlQuery[k] in ('*', '.*'):
+                    continue
+                wfFields = True
+        if searchType == 'word' or wfFields:
+            htmlQuery['wtype1'] = 'word'
+        else:
+            htmlQuery['wtype1'] = 'lemma'
         esQuery = self.html2es(htmlQuery, query_size=0, sortOrder='', searchOutput='words')
         if searchType == 'lemma':
-            self.lemmatize_word_query(esQuery)
-        esQuery['aggs'] = {'agg_rank': {'terms': {'field': 'rank_true',
-                                                  'order': {'_term': 'asc'},
-                                                  'size': 10000}}}
+            esQuery['query']['bool']['must_not'].append({'term': {'l_id': 'l0'}})
+        if searchType == 'lemma' and wfFields:
+            esQuery['aggs'] = {
+                'agg_rank': {
+                    'terms': {
+                        'field': 'lemma_rank_true',
+                        'order': {'_key': 'asc'},
+                        'size': self.maxFreqRank
+                    },
+                    'aggs': {
+                        'subagg_nlemmata': {
+                            'cardinality': {'field': 'l_id'}
+                        }
+                    }
+                }
+            }
+        else:
+            esQuery['aggs'] = {
+                'agg_rank': {
+                    'terms': {
+                        'field': 'rank_true',
+                        'order': {'_key': 'asc'},
+                        'size': self.maxFreqRank
+                    }
+                }
+            }
         return esQuery
 
     def filter_sentences(self, iterSent, constraints, nWords=1):

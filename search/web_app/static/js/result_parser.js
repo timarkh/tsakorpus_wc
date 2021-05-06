@@ -3,26 +3,28 @@ var searchType = 'none';
 var excludeDocs = [];
 
 function print_json(results) {
-	//alert("success" + JSON.stringify(results));
-	$('.progress').css('visibility', 'hidden');
+    hide_query_panel();
+	$('.progress').css('display', 'none');
 	$('#analysis').css('display', 'none');
 	$('#w_id1').val('');
 	$('#l_id1').val('');
-	$("#res_p").html( "<p style=\"font-family: 'Courier New', Courier, 'Lucida Sans Typewriter', 'Lucida Typewriter', monospace;\">Success!<hr>" + JSON.stringify(results, null, 2).replace(/\n/g, "<br>").replace(/ /g, "&nbsp;") ) + "</p>";
+	$("#search_results").html('<pre><code id="debug_code">' + JSON.stringify(results, null, 2) + '</code></pre>');
+	//alert("success" + JSON.stringify(results));
 }
 
 function print_html(results) {
 	//alert("success" + JSON.stringify(results));
-	$('.progress').css('visibility', 'hidden');
+	$('.progress').css('display', 'none');
 	$('#analysis').css('display', 'none');
 	$('#w_id1').val('');
 	$('#l_id1').val('');
-	$("#res_p").html(results);
+	$("#search_results").html(results);
+	$('#video_prompt').show();
 	toggle_interlinear();
 }
 
 function update_wordlist(results) {
-	$('.progress').css('visibility', 'hidden');
+	$('.progress').css('display', 'none');
 	$('#analysis').css('display', 'none');
 	$('#w_id1').val('');
 	$('#l_id1').val('');
@@ -53,11 +55,11 @@ function assign_word_events() {
 	$("span.expand").unbind('click');
 	$("span.get_glossed_copy").unbind('click');
 	$("span.context_header").unbind('click');
-	$("span.search_w").unbind('click');
-	$("span.search_l").unbind('click');
-	$("span.stat_w").unbind('click');
-	$("span.stat_l").unbind('click');
-	$("span.page_link").unbind('click');
+	$(".search_w").unbind('click');
+	$(".search_l").unbind('click');
+	$(".stat_w").unbind('click');
+	$(".stat_l").unbind('click');
+	$(".page_link").unbind('click');
 	$(".cx_toggle_chk").unbind('change');
 	$(".sent_lang").unbind('change');
 	$("#td_load_more_words").unbind('click');
@@ -66,11 +68,11 @@ function assign_word_events() {
 	$('span.expand').click(expand_context);
 	$('span.get_glossed_copy').click(copy_glossed_sentence);
 	$('span.context_header').click(show_doc_meta);
-	$('span.search_w').click(search_word_from_list);
-	$('span.search_l').click(search_lemma_from_list);
-	$('span.stat_w').click(show_word_stats);
-	$('span.stat_l').click(show_lemma_stats);
-	$("span.page_link").click(page_click);
+	$('.search_w').click(search_word_from_list);
+	$('.search_l').click(search_lemma_from_list);
+	$('.stat_w').click(show_word_stats);
+	$('.stat_l').click(show_lemma_stats);
+	$(".page_link").click(page_click);
 	$(".cx_toggle_chk").change(context_toggle);
 	$('.sent_lang').click(show_sentence_img);
 	$("#td_load_more_words").click(load_more_words);
@@ -80,33 +82,36 @@ function assign_word_events() {
 	assign_sent_meta_popup();
 }
 
-function highlight_cur_word(e) {
-	var e_obj = $(e.currentTarget);
-	targetClasses = e_obj.attr('class').split(' ');
-	$('.w_highlighted').removeClass('w_highlighted');
-	targetClasses.forEach(highlight_word_spans);
-}
-
 function expand_context(e) {
-	var n_sent = $(e.currentTarget).attr('data-nsent');
+	let n_sent = $(e.currentTarget).attr('data-nsent');
 	load_expanded_context(n_sent);
 }
 
 function copy_glossed_sentence(e) {
-	var n_sent = $(e.currentTarget).attr('data-nsent');
-	var hiddenTextArea = document.createElement("textarea");
+	let n_sent = $(e.currentTarget).attr('data-nsent');
+	let hiddenTextArea = document.createElement("textarea");
 	hiddenTextArea.id = "glossed_copy_textarea";
 	hiddenTextArea.style.boxShadow = 'none';
 	document.body.appendChild(hiddenTextArea);
 	load_glossed_sentence(n_sent);
 	$('#glossed_copy_textarea').focus();
 	$('#glossed_copy_textarea').select();
-	var successful = document.execCommand('copy');
+	let successful = document.execCommand('copy');
+	if (successful) {
+		let pos = $(e.currentTarget).position();
+		let width = $("#glossed_copy_successful").width();
+		let height = $("#glossed_copy_successful").height();
+		$("#glossed_copy_successful").css({left: pos.left - width - $(e.currentTarget).width() - 20, top: pos.top + $(e.currentTarget).height() / 2 - height / 2});
+		$('#glossed_copy_successful').fadeIn(200);
+		setTimeout(function(){
+			$('#glossed_copy_successful').fadeOut(600, function() {$(this).hide();});
+		}, 1200);
+	}
 	document.body.removeChild(hiddenTextArea);
 }
 
 function context_toggle(e) {
-	var contextDiv = $(e.currentTarget).parent().parent().parent();
+	let contextDiv = $(e.currentTarget).parent().parent().parent();
 	contextDiv.toggleClass('context_off');
 	contextID = contextDiv.attr('id').substring(7);
 	$.ajax({url: "toggle_sentence/" + contextID});
@@ -117,8 +122,9 @@ function show_doc_meta(e) {
 	while (e_obj.attr('class') != 'context_header') {
 		e_obj = e_obj.parent();
 	}
-	var doc_meta = e_obj.attr('data-meta');
-	alert(doc_meta.replace(/\\n/g, "\n"));
+	var docMeta = e_obj.attr('data-meta');
+	$("#metadata_dialogue_body").html(html_decode(docMeta.replace(/\\n/g, "\n")));
+	$("#metadata_dialogue").modal('show');
 }
 
 function clear_search_form() {
@@ -155,16 +161,6 @@ function page_click(e) {
 	get_sentences_page(page);
 }
 
-function highlight_word_spans(item, i) {
-	if (item == "word" || item.includes('match') || !item.startsWith("w")) return;
-	$('.' + item).addClass('w_highlighted');
-}
-
-function highlight_para_spans(item, i) {
-	if (item == "para" || item.includes('match') || !item.startsWith("p")) return;
-	$('.' + item).addClass('p_highlighted');
-}
-
 function make_player_markers(objContext, curFragment) {
 	var markers = [];
 	children = objContext.children('.src');
@@ -197,6 +193,7 @@ function make_player_markers(objContext, curFragment) {
 
 function src_align_span(item, i) {
 	if (!item.startsWith("src") || item == "src" || item.includes('highlighted')) return;
+	$('#video_prompt').hide();
 	var alignmentInfo = srcAlignments[item];
 	var srcPlayer = videojs('src_player');
 	var realSrc = alignmentInfo.src;
@@ -289,18 +286,6 @@ function show_expanded_context(results) {
 	toggle_interlinear();
 }
 
-function assign_para_highlight() {
-	$("span.para").unbind('hover');
-	$("span.para").unbind('mousemove');
-	$('span.para').hover(function (e) {
-		$('.p_highlighted').removeClass('p_highlighted');
-		var targetClasses = $(this).attr('class').split(' ');
-		targetClasses.forEach(highlight_para_spans);
-	}, function () {
-		$('.p_highlighted').removeClass('p_highlighted');
-	});
-}
-
 function assign_src_alignment() {
 	// $("span.src").unbind('click');
 	$('span.src').click(function (e) {
@@ -324,72 +309,6 @@ function show_sentence_img(e) {
 	else {
 		hide_img();
 	}
-}
-
-function assign_sent_meta_popup() {
-    $("span.sent_lang").unbind('hover');
-	$("span.sent_lang").unbind('mousemove');
-    $('span.sent_lang').hover(function (e) {
-/*
-        var sentMeta = $(this).find('.sentence_meta');
-        if (sentMeta.html() != '') {
-			sentMeta.show();
-        }
-*/
-	}, function () {
-		$('.sentence_meta').hide();
-	});
-}
-
-function assign_gram_popup() {
-	var moveLeft = 20;
-	var moveDown = 10;
-	$("span.word, span.word_in_table").unbind('hover');
-	$("span.word, span.word_in_table").unbind('mousemove');
-	$('.word, .word_in_table').hover(function (e) {
-		$('#analysis').replaceWith('<div id="analysis">' + $("<textarea/>").html(($(this).attr("data-ana"))).text() + '</div>');
-		anaWidth = $('#analysis').width();
-		anaHeight = $('#analysis').height();
-		$('#analysis').css('left', $(document).innerWidth() - anaWidth - 30);
-		$('#analysis').css('top', $(document).innerHeight() - anaHeight - 30);
-		$('#analysis').show();
-        if ($('.sentence_meta').length > 0) {
-			var prevEl = $(this).prev();
-			while (true) {
-				if (prevEl.hasClass('sentence_meta')) {
-					break;
-				}
-				prevEl = prevEl.prev();
-			}
-			if (prevEl.hasClass('sentence_meta')) {
-				$('.sentence_meta').hide();
-				prevEl.show();
-			}
-        }
-	}, function () {
-		$('#analysis').hide();
-        $('.sentence_meta').hide();
-	});
-	$('.word, .word_in_table').mousemove(function (e) {
-		anaWidth = $('#analysis').width();
-		anaHeight = $('#analysis').height();
-		if (e.pageX + moveLeft + anaWidth + 30 < $(document).innerWidth()) {
-			$('#analysis').css('left', e.pageX + moveLeft);
-			$('#analysis').width(anaWidth);
-		}
-		else {
-			$('#analysis').css('left', $(document).innerWidth() - anaWidth - 30);
-			$('#analysis').width(anaWidth);
-		}
-		if (e.pageY + moveDown + anaHeight + 30 < $(document).innerHeight()) {
-			$('#analysis').css('top', e.pageY + moveDown);
-			$('#analysis').height(anaHeight);
-		}
-		else {
-			$('#analysis').css('top', $(document).innerHeight() - anaHeight - 30);
-			$('#analysis').height(anaHeight);
-		}
-	});
 }
 
 function show_word_stats(e) {
@@ -430,40 +349,6 @@ function show_lemma_stats(e) {
 	}
 }
 
-function toggle_interlinear() {
-	if (searchType != 'sentences') {
-		return;
-	}
-	if ($('#viewing_mode option:selected').attr('value') == 'glossed')
-	{
-		$('span.word, span.word_in_table').each(function (index) {
-			if ($(this).find('.ana_interlinear').length > 0) {
-				return;
-			}
-			$(this).css("display", "inline-table");
-			var data_ana = $(this).attr('data-ana');
-			if (data_ana == null || data_ana.length <= 0) {
-				return;
-			}
-			data_ana = data_ana.replace('class="popup_word"', 'class="popup_word ana_interlinear"');
-			data_ana = data_ana.replace(/<span class="popup_(key|wf)">.*?<\/span>/g, '');
-			data_ana = data_ana.replace('class="popup_value"', 'class="popup_value_small"');
-			data_ana = data_ana.replace(/(class="popup_value">[^<>]{38,100}?)[ ,;][^<>]{3,}/g, '$1...');
-			if (/<div class="popup_word[^<>]*>\s*<\/div>\s*/.test(data_ana)) {
-				return;
-			}
-			$(this).html($(this).html() + '<br>' + data_ana);
-		});
-	}
-	else {
-		$('span.word, span.word_in_table').each(function (index) {
-			$(this).css("display", "inline-block");
-			$(this).html($(this).html().replace(/<br>/, ''));
-		});
-		$('.ana_interlinear').remove();
-	}
-}
-
 function make_sortable() {
 	$('th').click(function(){
 		var table = $(this).parents('table').eq(0);
@@ -490,6 +375,12 @@ function make_sortable() {
 function row_comparer(index) {
     return function(a, b) {
         var valA = getCellValue(a, index), valB = getCellValue(b, index);
+        if (valA == undefined) {
+            return 1;
+        }
+        if (valB == undefined) {
+            return -1;
+        }
         return $.isNumeric(valA) && $.isNumeric(valB) ? valA - valB : valA.localeCompare(valB);
     }
 }
@@ -536,6 +427,7 @@ function change_tier(e) {
 			$(this).addClass('disabled_search_input');
 		}
 	});
+	initialize_keyboards();
 }
 
 function toggle_full_image() {
@@ -553,7 +445,7 @@ function load_more_words(e) {
 		//complete: stop_progress_bar,
 		success: update_wordlist,
 		error: function(errorThrown) {
-			$('.progress').css('visibility', 'hidden');
+			$('.progress').css('display', 'none');
 			alert( JSON.stringify(errorThrown) );
 		}
 	});

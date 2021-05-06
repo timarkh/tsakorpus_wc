@@ -61,3 +61,6 @@ udmurt	Udmurt
 ukrainian	Ukrainian
 yakut	Yakut
 yiddish	Yiddish
+
+other	Other
+english_trans	Translation (English)

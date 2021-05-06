@@ -1,5 +1,5 @@
 **.pyc
-**/.idea/**
+**.idea/**
 txt2json/corpus/json/**
 txt2json/corpus/txt/**
 corpus/**
@@ -52,3 +52,6 @@ USER_CONFIG/
 conf/categories_*.json
 conf/corpus_*.json
 messages.pot
+src_convertors/corpus/json/
+src_convertors/corpus/json_disamb/
+*.fwbackup

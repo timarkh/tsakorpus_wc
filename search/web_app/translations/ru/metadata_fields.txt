@@ -68,3 +68,8 @@ year_from	год: от
 year_post	год (пост)
 year_publ	год публикации
 year_to	год: до
+
+message_type	тип надписи
+organization	организация
+organization_type	тип организации
+img	ID изображения

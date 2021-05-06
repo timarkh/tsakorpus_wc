@@ -68,3 +68,8 @@ year_from	Year: from
 year_post	Year (post-level)
 year_publ	Publication year
 year_to	Year: to
+
+message_type	Message type
+organization	Organization
+organization_type	Organization type
+img	Image ID
